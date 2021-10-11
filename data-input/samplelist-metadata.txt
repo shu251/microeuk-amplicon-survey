@@ -1,0 +1,90 @@
+SAMPLE	VENT	COORDINATES	SITE	Sample_or_Control	SAMPLEID	DEPTH	SAMPLETYPE	YEAR	TEMP	pH	PercSeawater	Mg	NO3	H2	H2S	CH4	ProkConc	Sample_actual	Type
+Axial_Anemone_FS891_2013	Anemone	45.9332 N 130.0137  W	Axial	Sample	FS891	1542	Vent	2013	28.2	5.5	88.9	46.5	35.5	13.9	1036	14.8	4.10E+05		
+Axial_AnemonePlume_AnemonePlume_2015	Anemone Plume	45.9335667 N 130.013667  W	Axial	Sample	AnemonePlume		Plume	2015											
+Axial_Boca_FS905_2013	Boca	45.927692 N 129.982482 W	Axial	Sample	FS905		Vent	2013											
+Axial_BSW1500m_BSW1500m_2015	Deep seawater	46.27389 N 129.79548  W	Axial	Sample	BSW1500m	1520	Background	2015	2	7.8	100	52.4	39	0.002	0	0.002	2.50E+04		
+Axial_Dependable_FS900_2013	Dependable	45.87992 N 129.80294 W	Axial	Sample	FS900		Vent	2013											
+Axial_ElGuapo_FS896_2013	El Guapo	45.926575 N 129.979479 W	Axial	Sample	FS896		Vent	2013											
+Axial_Marker113_FS903_2013	Marker113	45.9227 N 129.9882  W	Axial	Sample	FS903	1520	Vent	2013	24.5	6.2	96	50.2	7.2	1.4	729	16.9	4.60E+05		
+Axial_Marker113_FS906_2014	Marker113	45.9227 N 129.9882  W	Axial	Sample	FS906	1518	Vent	2014	24.3	5.8	96.4	48.8	8.1	1	556	38	6.80E+05		
+Axial_Marker113_FS915_2015	Marker113	45.9227 N 129.9882  W	Axial	Sample	FS915	1520	Vent	2015	25.4	6.6	95.8	50.2	8	0.3	578.2	22.3	1.50E+06		
+Axial_Marker33_FS904_2013	Marker33	45.9332 N 129.9822  W	Axial	Sample	FS904	1516	Vent	2013	27.3	5.5	87.7	45.9	18.3	1.5	545	19	4.20E+05		
+Axial_Marker33_FS908_2014	Marker33	45.9332 N 129.9822  W	Axial	Sample	FS908	1514	Vent	2014	18.5	5.6	91.9	48.1	28.2	1.5	261.5	6.4	3.90E+05		
+Axial_N3Area_FS898_2013	N3Area	45.943716 N 129.985163 W	Axial	Sample	FS898		Vent	2013											
+Axial_Skadi_FS902_2013	Skadi	45.923383 N 129.982853 W	Axial	Sample	FS902		Vent	2013											
+Axial_Skadi_FS910_2014	Skadi	45.923383 N 129.982853 W	Axial	Sample	FS910		Vent	2014											
+GordaRidge_Shipblank_CTRL_2019_S31	Control	not applicable	Laboratory	Control	Control	Control	Control	2019											
+GordaRidge_Shipblank_CTRL_2019_S32	Control	not applicable	Laboratory	Control	Control	Control	Control	2019											
+GordaRidge_Shipblank_CTRL_2019_S33	Control	not applicable	Laboratory	Control	Control	Control	Control	2019											
+GordaRidge_Vent086_SUPRS1_2019	Candelabra	42.75506794 N 126.709613 W	GordaRidge	Sample	Vent086	2730	Vent	2019	79	5.5	88	35.7					55076.66		
+GordaRidge_Vent087_SUPRS2_2019	Candelabra	42.75503414 N 126.7094585 W	GordaRidge	Sample	Vent087	2730	Vent	2019	79	5.5	88	35.7					55076.66		
+GordaRidge_Vent088_SUPRS3_2019	Candelabra	42.75503414 N 126.7094585 W	GordaRidge	Sample	Vent088	2730	Vent	2019	79	5.5	88	35.7					55076.66		
+GordaRidge_Plume036_sterivex_2019_REPb	Candelabra Plume	42.7551105 N 126.709442 W	GordaRidge	Sample	Plume036	2725	Plume	2019	1.7								7.69E+04		
+Axial_ExtractControl_CTRL_2019	Control	not applicable	Laboratory	Control	Control	Control	Control	2019											
+GordaRidge_BSW020_sterivex_2019_REPa	Deep seawater	42.7495125 N 126.710294 W	GordaRidge	Sample	BSW020	2010	Background	2019	1.8	7.8	100	51.8					3.91E+04		
+GordaRidge_BSW056_sterivex_2019_REPb	Deep seawater	42.76060928 N 126.7047891 W	GordaRidge	Sample	BSW056	2010	Background	2019	1.8	7.8	100	51.8					3.91E+04		
+GordaRidge_Vent009_SUPRS1_2019	Mt Edwards	42.75464576 N 126.7090451 W	GordaRidge	Sample	Vent009	2707	Vent	2019	40	6	83	42.6					51439.52		
+GordaRidge_Vent010_SUPRS2_2019	Mt Edwards	42.754692 N 126.7090115 W	GordaRidge	Sample	Vent010	2707	Vent	2019	40	6	83	42.6					51439.52		
+GordaRidge_Vent011_SUPRS3_2019	Mt Edwards	42.754692 N 126.7090115 W	GordaRidge	Sample	Vent011	2707	Vent	2019	40	6	83	42.6					51439.52		
+GordaRidge_Plume096_sterivex_2019	Mt Edwards Plume	42.75465646 N 126.7091669 W	GordaRidge	Sample	Plume096	2707	Plume	2019	1.8										
+GordaRidge_Plume001_sterivex_2019_REPa	Near vent BW	42.75500527 N 126.709891 W	GordaRidge	Sample	Plume001	2745	Background	2019	1.7	7.8	100	51.8					51959.11		
+GordaRidge_Plume001_sterivex_2019_REPb	Near vent BW	42.75500527 N 126.709891 W	GordaRidge	Sample	Plume001	2745	Background	2019	1.7	7.8	100	51.8					51959.11		
+GordaRidge_BSW081_sterivex_2019	Shallow seawater	42.7546 N 126.743 W	GordaRidge	Sample	BSW081	150	Background	2019	8.6		100	51.8							
+GordaRidge_Vent105_SUPRS9_2019	Sir Ventsalot	42.761202 N 126.7054775 W	GordaRidge	Sample	Vent105	2732	Vent	2019	72		98	50.8					52998.29		
+GordaRidge_Vent106_SUPRS10_2019	Sir Ventsalot	42.76131802 N 126.7054541 W	GordaRidge	Sample	Vent106	2732	Vent	2019	72		98	50.8					52998.29		
+GordaRidge_Vent107_SUPRS11_2019	Sir Ventsalot	42.76131802 N 126.7054541 W	GordaRidge	Sample	Vent107	2732	Vent	2019	72		98	50.8					52998.29		
+GordaRidge_Vent039_SUPRS1_2019	Venti Latte	42.7548145 N 126.7088945 W	GordaRidge	Sample	Vent039	2708	Vent	2019	11	6.4	97	50.9					111192.5		
+GordaRidge_Vent040_SUPRS2_2019	Venti Latte	42.754858 N 126.708922 W	GordaRidge	Sample	Vent040	2708	Vent	2019	11	6.4	97	50.9					111192.5		
+GordaRidge_Vent041_SUPRS3_2019	Venti Latte	42.754858 N 126.708922 W	GordaRidge	Sample	Vent041	2708	Vent	2019	11	6.4	97	50.9					111192.5		
+51_AGAGAA_S13	labblank		control	Control			Control	2020										51_CTRL_control_blank_labblank_0_0_Jun2021	blank
+52_MCR_Piccard_expTf_LotsOShrimp_A_0_Jun2021	LotsOShrimp		Piccard	Sample			Incubation	2020											expTf
+53_MCR_Piccard_expTf_LotsOShrimp_B_0_Jun2021	LotsOShrimp		Piccard	Sample			Incubation	2020											expTf
+54_MCR_VonDamm_expTf_MustardStand_0_0_Jun2021	MustardStand		VonDamm	Sample			Incubation	2020											expTf
+55_MCR_VonDamm_expTf_ShrimpHole_0_0_Jun2021	ShrimpHole		VonDamm	Sample			Incubation	2020											expTf
+56_MCR_Piccard_expTf_Plume_0_5_Jun2021	Plume		Piccard	Sample			Incubation	2020											expTf
+57_MCR_Piccard_expTf_Shrimpocalypse_0_0_Jun2021	Shrimpocalypse		Piccard	Sample			Incubation	2020											expTf
+58_MCR_VonDamm_expTf_Plume_0_0_Jun2021	Plume		VonDamm	Sample			Incubation	2020											expTf
+59_MCR_VonDamm_expTf_X18_0_0_Jun2021	X18		VonDamm	Sample			Incubation	2020											expTf
+60_MCR_VonDamm_expTf_BSW_0_0_Jun2021	BSW		VonDamm	Sample			Incubation	2020											expTf
+61_MCR_VonDamm_expTf_Rav2_0_0_Jun2021	Rav2		VonDamm	Sample			Incubation	2020											expTf
+62_TAACAC_S14	Quakeplume		Piccard	Sample			Background	2020										62_MCR_Piccard_CTD_Quakeplume_CTD005_5_Jun2021	CTD
+63_MCR_VonDamm_CTD_BSW_CTD002_0_Jun2021	BSW		VonDamm	Sample			Background	2020											CTD
+64_CTRL_control_blank_shipboard_0_0_Jun2021	shipboard		control	Control			Control	2020											blank
+65_MCR_VonDamm_CTD_Plume_CTD003_0_Jun2021	Plume		VonDamm	Sample			Plume	2020											CTD
+66_MCR_VonDamm_HOG_ArrowLoop_J21243HOG18_5_Jun2021	ArrowLoop		VonDamm	Sample			Vent	2020	137										HOG
+67_MCR_VonDamm_HOG_WhiteCastle_J21235HOG12_5_Jun2021	WhiteCastle		VonDamm	Sample			Vent	2020	108										HOG
+68_MCR_Piccard_HOG_LotsOShrimp_J21242HOG14_0_Jun2021	LotsOShrimp		Piccard	Sample			Vent	2020	19										HOG
+69_MCR_VonDamm_HOG_MustardStand_J21243HOG14_5_Jun2021	MustardStand		VonDamm	Sample			Vent	2020	108										HOG
+70_MCR_VonDamm_HOG_Rav2_J21238HOG14_5_Jun2021	Rav2		VonDamm	Sample			Vent	2020	94										HOG
+71_MCR_VonDamm_HOG_OldManTree_J21238HOG20_5_Jun2021	OldManTree		VonDamm	Sample			Vent	2020	121.6										HOG
+72_MCR_VonDamm_HOG_ShrimpHole_J21244HOG18_0_Jun2021	ShrimpHole		VonDamm	Sample			Vent	2020	21										HOG
+73_MCR_Piccard_CTD_BSW_CTD005_0_Jun2021	BSW		Piccard	Sample			Background	2020											CTD
+74_MCR_Piccard_CTD_Plume_CTD004_5_Jun2021	Plume		Piccard	Sample			Plume	2020											CTD
+75_CACCCT_S15	shipboard		control	Control			Control	2020										75_CTRL_control_Control_shipboard_0_0_Jun2021	Control
+76_MCR_VonDamm_HOG_X18_J21235HOG20_0_Jun2021	X18		VonDamm	Sample			Vent	2020	48										HOG
+77_MCR_Piccard_HOG_Shrimpocalypse_J21240HOG14_0_Jun2021	Shrimpocalypse		Piccard	Sample			Vent	2020	85										HOG
+78_MCR_Piccard_HOG_LotsOShrimp_J21241HOG14_0_Jun2021	LotsOShrimp		Piccard	Sample			Vent	2020	36										HOG
+79_MCR_VonDamm_HOG_Bartizan_J21244HOG12_5_Jun2021	Bartizan		VonDamm	Sample			Vent	2020	129										HOG
+80_MCR_VonDamm_HOG_Rav2_J21244HOG20_0_Jun2021	Rav2		VonDamm	Sample			Vent	2020	98.2										HOG
+81_AAAGTT_S16	Quartz2		substrate	Control			Microcolonizer	2019										81_CTRL_substrate_blank_Quartz2_na_0_Jun2021	blank
+82_CGTGCA_S17	Riftia		substrate	Control			Microcolonizer	2019										82_CTRL_substrate_blank_Riftia_na_0_Jun2021	blank
+83_CCGAAC_S18	Shell		substrate	Control			Microcolonizer	2019										83_CTRL_substrate_blank_Shell_na_0_Jun2021	blank
+84_GR_substrate_MC1_Quartz2_7_0_Jun2021	Quartz2		substrate	Sample			Microcolonizer	2019											MC1
+85_GR_substrate_MC1_Riftia_7_0_Jun2021	Riftia		substrate	Sample			Microcolonizer	2019											MC1
+86_GR_substrate_MC1_Shell_7_5_Jun2021	Shell		substrate	Sample			Microcolonizer	2019											MC1
+87_GR_substrate_MC4_Quartz2_7_0_Jun2021	Quartz2		substrate	Sample			Microcolonizer	2019											MC4
+88_GR_substrate_MC4_Riftia_7_0_Jun2021	Riftia		substrate	Sample			Microcolonizer	2019											MC4
+89_GR_substrate_MC4_Shell_7_5_Jun2021	Shell		substrate	Sample			Microcolonizer	2019											MC4
+90_GR_substrate_MC5_Quartz2_8_0_Jun2021	Quartz2		substrate	Sample			Microcolonizer	2019											MC5
+91_GR_substrate_MC5_Riftia_8_0_Jun2021	Riftia		substrate	Sample			Microcolonizer	2019											MC5
+92_GR_substrate_MC5_Shell_8_5_Jun2021	Shell		substrate	Sample			Microcolonizer	2019											MC5
+93_GR_substrate_MC6_Quartz2_8_0_Jun2021	Quartz2		substrate	Sample			Microcolonizer	2019											MC6
+94_GR_substrate_MC6_Riftia_8_0_Jun2021	Riftia		substrate	Sample			Microcolonizer	2019											MC6
+95_GR_substrate_MC6_Shell_8_5_Jun2021	Shell		substrate	Sample			Microcolonizer	2019											MC6
+96_GGCGAC_S19	blank		substrate	Control			Microcolonizer	2019										96_CTRL_substrate_blank_blank_na_0_Jun2021	blank
+97_GR_substrate_MC2_Quartz2_6_0_Jun2021	Quartz2		substrate	Sample			Microcolonizer	2019										97_GR_substrate_MC2_Quartz2_6_0_Jun2021	MC2
+98_GR_substrate_MC2_Riftia_6_0_Jun2021	Riftia		substrate	Sample			Microcolonizer	2019											MC2
+99_GR_substrate_MC2_Shell_6_5_Jun2021	Shell		substrate	Sample			Microcolonizer	2019											MC2
+100_GR_substrate_MC3_Quartz2_6_0_Jun2021	Quartz2		substrate	Sample			Microcolonizer	2019											MC3
+101_GR_substrate_MC3_Riftia_6_0_Jun2021	Riftia		substrate	Sample			Microcolonizer	2019											MC3
+102_GR_substrate_MC3_Shell_6_5_Jun2021	Shell		substrate	Sample			Microcolonizer	2019											MC3
