@@ -1,0 +1,45 @@
+
+# Run dada2
+qiime dada2 denoise-paired \
+        --i-demultiplexed-seqs mcr-ctrl-pe-trimmed.qza \
+        --p-trunc-len-f 260 \
+        --p-trunc-len-r 225 \
+        --p-max-ee-f 2 \
+        --p-max-ee-r 2 \
+        --p-min-overlap 10 \
+        --p-pooling-method independent \
+        --p-n-reads-learn 100000 \
+        --p-n-threads 8 \
+        --p-chimera-method pooled \
+        --o-table /vortexfs1/scratch/sarahhu/mcr-ctrl-asv-table.qza \
+        --o-representative-sequences /vortexfs1/scratch/sarahhu/mcr-ctrl-ref-seqs.qza \
+        --o-denoising-stats /vortexfs1/scratch/sarahhu/mcr-ctrl-dada2-stats.qza
+
+qiime tools export \
+        --input-path /vortexfs1/scratch/sarahhu/mcr-ctrl-asv-table.qza \
+        --output-path /vortexfs1/scratch/sarahhu/mcr-ctrl-output/
+
+biom convert -i /vortexfs1/scratch/sarahhu/mcr-ctrl-output/feature-table.biom \
+        -o /vortexfs1/scratch/sarahhu/mcr-ctrl-output/mcr-ctrl-asv-table.tsv \
+        --to-tsv
+
+# Get dada2 stats
+qiime metadata tabulate \
+       --m-input-file /vortexfs1/scratch/sarahhu/mcr-ctrl-dada2-stats.qza \
+       --o-visualization /vortexfs1/scratch/sarahhu/mcr-ctrl-dada2-stats.qzv
+
+# Assign taxonomy
+qiime feature-classifier classify-consensus-vsearch \
+        --i-query /vortexfs1/scratch/sarahhu/mcr-ctrl-ref-seqs.qza \
+        --i-reference-reads /vortexfs1/omics/huber/db/pr2-db/pr2_version_4.14_seqs.qza \
+        --i-reference-taxonomy /vortexfs1/omics/huber/db/pr2-db/pr2_version_4.14_tax.qza \
+        --o-classification /vortexfs1/scratch/sarahhu/mcr-ctrl-taxa.qza \
+        --p-threads 8 \
+        --p-maxaccepts 10 \
+        --p-perc-identity 0.8 \
+        --p-min-consensus 0.70
+
+# Export taxonomy table
+qiime tools export \
+        --input-path /vortexfs1/scratch/sarahhu/mcr-ctrl-taxa.qza \
+        --output-path /vortexfs1/scratch/sarahhu/mcr-ctrl-output/

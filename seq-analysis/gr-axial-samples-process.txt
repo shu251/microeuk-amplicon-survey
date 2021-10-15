@@ -1,0 +1,59 @@
+#!/bin/bash
+#SBATCH --partition=compute           # Queue selection
+#SBATCH --job-name=gr-axial-samples        # Job name
+#SBATCH --mail-type=ALL               # Mail events (BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=sarahhu@whoi.edu    # Where to send mail
+#SBATCH --ntasks=4                    # Run a single task
+#SBATCH --cpus-per-task=16             # Number of CPU cores per task (if 8 == 8 threads)
+#SBATCH --mem=100000                     # Job memory request (if 10,000 == 10000MB == 10GB)
+#SBATCH --time=120:00:00               # Time limit hrs:min:sec
+#SBATCH --output=qiime-gr-axial.log   # Standard output/error
+#SBATCH --qos=unlim
+#export OMP_NUM_THREADS=10       # 8 threads
+
+source activate qiime2-2021.4
+
+# Run dada2
+qiime dada2 denoise-paired \
+        --i-demultiplexed-seqs gr-axial-pe-trimmed.qza \
+        --p-trunc-len-f 260 \
+        --p-trunc-len-r 225 \
+        --p-max-ee-f 2 \
+        --p-max-ee-r 2 \
+        --p-min-overlap 10 \
+        --p-pooling-method independent \
+        --p-n-reads-learn 100000 \
+        --p-n-threads 10 \
+        --p-chimera-method pooled \
+        --o-table /vortexfs1/scratch/sarahhu/gr-axial-asv-table.qza \
+        --o-representative-sequences /vortexfs1/scratch/sarahhu/gr-axial-ref-seqs.qza \
+        --o-denoising-stats /vortexfs1/scratch/sarahhu/gr-axial-dada2-stats.qza
+
+qiime tools export \
+        --input-path /vortexfs1/scratch/sarahhu/gr-axial-asv-table.qza \
+        --output-path /vortexfs1/scratch/sarahhu/gr-axial-output/
+
+biom convert -i /vortexfs1/scratch/sarahhu/gr-axial-output/feature-table.biom \
+        -o /vortexfs1/scratch/sarahhu/gr-axial-output/gr-axial-asv-table.tsv \
+        --to-tsv
+
+# Get dada2 stats
+qiime metadata tabulate \
+       --m-input-file /vortexfs1/scratch/sarahhu/gr-axial-dada2-stats.qza \
+       --o-visualization /vortexfs1/scratch/sarahhu/gr-axial-dada2-stats.qzv
+
+# Assign taxonomy
+qiime feature-classifier classify-consensus-vsearch \
+        --i-query /vortexfs1/scratch/sarahhu/gr-axial-ref-seqs.qza \
+        --i-reference-reads /vortexfs1/omics/huber/db/pr2-db/pr2_version_4.14_seqs.qza \
+        --i-reference-taxonomy /vortexfs1/omics/huber/db/pr2-db/pr2_version_4.14_tax.qza \
+        --o-classification /vortexfs1/scratch/sarahhu/gr-axial-taxa.qza \
+        --p-threads 8 \
+        --p-maxaccepts 10 \
+        --p-perc-identity 0.8 \
+        --p-min-consensus 0.70
+
+# Export taxonomy table
+qiime tools export \
+        --input-path /vortexfs1/scratch/sarahhu/gr-axial-taxa.qza \
+        --output-path /vortexfs1/scratch/sarahhu/gr-axial-output/
