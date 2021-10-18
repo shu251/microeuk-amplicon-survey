@@ -11,6 +11,7 @@ output:
     toc: true
     toc_depth: 3
     toc_float: true
+    code_folding: hide
   pdf_document:
     toc: true
     toc_depth: '3'
@@ -23,33 +24,61 @@ knit: (function(input_file, encoding) {
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, tidy = FALSE)
+knitr::opts_chunk$set(echo = TRUE, tidy = FALSE, message = FALSE)
 ```
 
-```{r Library loading initial}
+```{r Library loading initial, echo=FALSE, message=FALSE}
 library(tidyverse); library(cowplot)
 library(phyloseq); library(decontam)
-library(compositions); library(patchwork); library(ggupset)
+library(compositions); library(patchwork); 
+library(ggupset); library(gt)
 ```
+
+Preliminary analyses for microeukaryote tag-sequence survey.
+
+
+*Description*: Investigate the diversity of single-celled microbial eukaryotic communities across several deep-sea hydrothermal vent sites (including NE Pacific, Caribbean). We plan to address questions related to the environmental factors that shape protistan community dynamics, and determine if patterns in species diversity and distribution vary at different deep-sea habitats. These questions will be addressed using similarly generated metabarcoding data from several distinct hydrothermal vents. Along with characterizing community structure, we plan to evaluate interactions between protist species (to identify putative predator-prey or parasite-host relationships) and their environment (to explore their relationship to geochemical properties). 
+
+
+_Questions to address_
+
+> What is the general biogeography and distribution of the deep-sea hydrothermal vent microbial eukaryotic community?
+
+> What community structure features (i.e., species richness, proportion cosmopolitan versus endemic, species evenness) are shared across or unique to deep-sea hydrothermal vent sites?
+
+> What environmental features (i.e., temperature, geochemistry) influence microbial eukaryotic community diversity? Can we identify if certain environmental factors select for putative vent endemics?
+
 
 # Import exisiting data
 Datasets included:
-* Gorda Ridge 2019 cruise
-* Axial seamount timeseries
-* Mid-Cayman Rise 2020 cruisee
+- Gorda Ridge 2019 cruise
+- Axial Seamount time series
+      - 2013, 2014, & 2015
+- Mid-Cayman Rise 2020 cruise
+
+All data generated from extracted RNA, reverse transcribed to cDNA and amplified with primers that target the V4 hypervariable region on the 18S rRNA gene. 
+
+Analysis done with QIIME2, kept 40-60% of the sequences through the QC process and generated Amplicon Sequence Variants (ASVs) with DADA2. Taxonomic assignment done with vsearch using the PR2 database (v4.14) at 80% identity. See the ```seq-analysis``` directory for QIIME2 code.
 
 ## Merged data from QIIME2 analysis
+
+After determining ASVs for each sequence run, ASV tables were merged. 
+
 ```{r Import taxonomy and ASV table, message=FALSE}
 merged_tax <- read_delim("data-input/taxonomy.tsv", delim = "\t")
 merged_asv <- read_delim("data-input/microeuk-merged-asv-table.tsv", delim = "\t", skip = 1)
 # head(merged_tax)
 ```
 
+### Import metadata & reformat
+Still want to find more metadata. As of Oct 16, have temperature and prokaryote cell/ml if available, but can add in more metadata for the MCR cruise.
+
 ```{r Import metadata}
 metadata <- read.delim("data-input/samplelist-metadata.txt")
 # head(metadata)
 ```
 
+Remove samples from Gorda Ridge microcolonizers and from the FLP experiments (Gorda Ridge and Mid-Cayman Rise).
 ```{r Join taxonomy and ASV data}
 asv_wtax <- merged_asv %>%
   select(FeatureID = '#OTU ID', everything()) %>%
@@ -76,7 +105,12 @@ asv_wtax <- merged_asv %>%
 ```
 ### Total number of sequences
 
-Barplots to show total number of sequences and total number of ASVs
+Barplots to show total number of sequences and total number of ASVs.
+
+Total number of sequences and ASVs parallel each other. The Axial and Gorda Ridge data were run on the same sequence run, with Mid-Cayman Rise run on a separate MiSeq run - so the average number of sequences (and ASVs) varies between these two runs. A few samples have too few sequences, they will be removed below. 
+
+This newest version of PR2 has bacteria and archaea in it. Very, very few were assigned to this. Majority assigned to eukaryotes.
+
 ```{r Plot total ASV and sequences, fig.height=10, fig.width=18}
 # head(asv_wtax)
 plot_grid(
@@ -112,16 +146,21 @@ plot_grid(
 
 ### Table reporting total ASVs and sequences
 ```{r Total ASVs raw}
-# View(asv_wtax %>% filter(value > 0) %>%
-#        group_by(SAMPLENAME, DATASET, SITE) %>%
-#        summarise(SEQ_SUM = sum(value),
-#                  ASV_COUNT = n()))
+asv_wtax %>% filter(value > 0) %>%
+       group_by(SAMPLENAME, DATASET, SITE) %>%
+       summarise(SEQ_SUM = sum(value),
+                 ASV_COUNT = n()) %>% 
+  ungroup() %>% 
+  gt(
+    groupname_col = c("DATASET", "SITE"),
+    rowname_col = "SAMPLENAME"
+  )
 ```
-
+> After removing contaminate ASVs below, I will set threshold of 10,000 sequences- if a sample has fewer than this, chuck it.
 
 ## Decontaminate sequence library
 Import sample description text file, import as phyloseq library, and remove potential contaminate ASVs and sequences. Catalog total number of ASVs and sequences removed from analysis.
-```{r Load libraries}
+```{r Load libraries for decontam}
 # library(decontam); library(phyloseq)
 ```
 
@@ -178,10 +217,12 @@ contam_prev <- isContaminant(physeq_wnames,
                                neg="is.neg", 
                                threshold = 0.5, normalize = TRUE) 
 
-# Report number of ASVs IDed as contamintants
+# Report number of ASVs IDed as contaminants
 table(contam_prev$contaminant)
 ```
 > 0.5 - this threshold will ID contaminants in all samples that are more prevalent in negative controls than in positive samples.
+
+_As of Oct 16 2021_: 54 ASVs deemed to be contaminant and will be removed.
 
 ### Remove problematic ASVs
 ```{r Assign contaminant ASVs}
@@ -208,11 +249,12 @@ tmp_orig <- (asv_wtax %>% filter(!(Sample_or_Control == "Control")))
 # Stats on lost
 x <- length(unique(tmp_orig$FeatureID)); x
 y <- length(unique(asv_wtax_decon$FeatureID)); y
-100*((y-x)/x) # 42 total ASVs lost
-a <- sum(tmp_orig$value);a #4.55 million
-b <- sum(asv_wtax_decon$value);b #4.14 million 
+y-x
+100*((y-x)/x) # 54 total ASVs lost
+a <- sum(tmp_orig$value);a #3.817 million
+b <- sum(asv_wtax_decon$value);b #3.799 million 
 100*((b-a)/a)
-# Lost 9% of sequences from whole dataset.
+# Lost 0.47% of sequences from whole dataset.
 
 ## Subsample to clean ASVs
 asv_wtax_wstats <- asv_wtax %>% 
@@ -221,6 +263,10 @@ asv_wtax_wstats <- asv_wtax %>%
     TRUE ~ "PASS"
   ))
 ```
+
+- Started with 17934 ASVs, post-decontamination, we have 17880 (a loss of 54 ASVs). 
+
+- Data started with 3817219 sequences, after removing 54 ASVs, we have 3799135 total sequences. There was a total loss of 0.473748% of sequences.
 
 ```{r, fig.height=18, fig.width=18}
 plot_grid(asv_wtax_wstats %>% 
@@ -248,11 +294,12 @@ plot_grid(asv_wtax_wstats %>%
         legend.position = "bottom"),
   ncol = 2)
 ```
+This plot shows the distribution of ASVs and sequences that failed or passed the decontamination step. Most obvious are the control samples that indicated the potentially contaminate ASVs.
 
 # Survey of sequences from _in situ_ samples
 ```{r Isolate in situ only}
-colnames(asv_wtax_wstats)
-
+# colnames(asv_wtax_wstats)
+# unique(asv_wtax_wstats$SAMPLE)
 sites <- c("Piccard", "VonDamm", "Axial", "GordaRidge")
 asv_insitu <- asv_wtax_wstats %>% filter(Sample_or_Control != "Control") %>% 
        filter(SITE %in% sites) %>% 
@@ -261,8 +308,8 @@ asv_insitu <- asv_wtax_wstats %>% filter(Sample_or_Control != "Control") %>%
        filter(DECONTAM == "PASS")
 
 # Get quick stats on totals
-sum(asv_insitu$value) # 2million sequences
-length(unique(asv_insitu$FeatureID)) #2923 ASVs
+sum(asv_insitu$value) # 3.8 million sequences
+length(unique(asv_insitu$FeatureID)) #12,379 ASVs
 ```
 
 Additional sample QC, check replicates, and determine if replicates should be averaged.
@@ -356,266 +403,50 @@ asv_insitu %>%
 
 # Removal of samples - QC
 
+Filter samples so that the total number of sequences is greater than 20,000 sequences.
 ```{r}
 # head(asv_insitu)
-# View(asv_insitu)
-# length(unique(asv_insitu$FeatureID))
-# View(asv_insitu %>% filter(value > 0) %>%
-#        group_by(SAMPLENAME, DATASET, SITE) %>%
-#        summarise(SEQ_SUM = sum(value),
-#                  ASV_COUNT = n_distinct(FeatureID)))
+# unique(asv_insitu$Sample_or_Control)
+# hist(asv_insitu$value)
+tmp <- (asv_insitu %>% 
+          group_by(SAMPLE, SAMPLENAME) %>% 
+          summarise(SUM = sum(value)) %>% 
+        filter(SUM < 20000))
+toofew <- as.character(unique(tmp$SAMPLE))
+toofew
 ```
+Samples: Axial_Dependable_FS900_2013 and GordaRidge_BSW020_sterivex_2019_REPa removed due to too few sequences.
 
+## Sequence and ASV table summary
 
-# Diversity estimators
-DivNet package - diversity estimation hypothesis testing from Amy Willis's group. This will also characterize the uncertainty of the richness estimate. Richness estimation is flawed because of sample depth and processing methods.
+Final table reporting total sequences and ASVs for each sample.
+```{r Remake table remove samples with too few sequences}
+asv_insitu_qc <- asv_insitu %>% 
+  filter(!(SAMPLE %in% toofew)) %>% 
+  filter(value > 0)
 
-```{r Load librarys for richness estimation}
-library(phyloseq); library(breakaway); library(DivNet)
-
-# Select eukaryotes only and create wide format dataframe
-insitu_wide <- asv_insitu %>% 
-  filter(Domain == "Eukaryota") %>% 
-  filter(!grepl("_Plume001_", SAMPLE)) %>% #removing "near vent background", not relevant in other data sets
-  select(FeatureID, Taxon, SAMPLE, value) %>%
-  pivot_wider(names_from = SAMPLE, values_from = value, values_fill = 0)
-
-# head(insitu_wide)
-insitu_samples <- as.character(colnames(insitu_wide %>% select(-Taxon, -FeatureID)))
-# insitu_samples
-```
-
-```{r Isolate matrix for asvs and taxa}
-insitu_tax_matrix <- insitu_wide %>%
-  select(FeatureID, Taxon) %>% 
-  separate(Taxon, c("Domain", "Supergroup", 
-                  "Phylum", "Class", "Order",
-                  "Family", "Genus", "Species"), sep = ";") %>% 
-  column_to_rownames(var = "FeatureID") %>% 
-  as.matrix
-
-insitu_asv_matrix <- insitu_wide %>% 
-  select(-Taxon) %>% 
-  column_to_rownames(var = "FeatureID") %>% 
-  as.matrix
-
-# Align row names for each matrix
-rownames(insitu_tax_matrix) <- row.names(insitu_asv_matrix)
-
-## Extract relevant metadata information
-# head(metadata)
-metadata_insitu <- metadata %>%
-  filter(SAMPLE %in% insitu_samples) %>% # from reformatting df above
-  select(SAMPLE, VENT, SITE, SAMPLETYPE, YEAR) %>%
-  unite(SAMPLELABEL, VENT, SITE, SAMPLETYPE, YEAR, sep = "_", remove = FALSE) %>% 
-  unite(TYPE_SITE, SITE, SAMPLETYPE, sep = "_", remove = FALSE)
-# View(metadata_insitu)
-```
-
-```{r Phyloseq import contined}
-# Import asv and tax matrices
-ASV = otu_table(insitu_asv_matrix, taxa_are_rows = TRUE)
-TAX = tax_table(insitu_tax_matrix)
-phylo_obj <- phyloseq(ASV, TAX)
-
-
-# Import metadata as sample data in phyloseq
-samplenames <- sample_data(metadata_insitu)
-# View(samplenames)
-
-# join as phyloseq object
-physeq_insitu = merge_phyloseq(phylo_obj, samplenames)
-
-## Check
-physeq_insitu
-# head(tax_matrix[1:2,])
-```
-Note options to apply divnet to 
-
-```{r Apply divnet}
-# Glom tax levels at the Order level, then perform divnet analysis
-# order_divnet <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), base = 3)
-# order_divnet <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), X = "SAMPLELABEL", base = 3)
-# order_divnet_TYPE <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), X = "SAMPLETYPE", base = 3)
-# order_divnet_TYPE_SITE <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), X = "TYPE_SITE", base = 3)
-
-# fam_divnet <- divnet(tax_glom(physeq_insitu, taxrank = "Family"), base = 3)
-```
-
-
-```{r extract shannon and simpson from divnet output}
-# head(metadata_insitu)
-  
-# fxn_extract_divet <- function(df){
-#   df$shannon %>% summary %>% 
-#   pivot_longer(cols = starts_with("estimate"), names_to = "ESTIMATE-shannon", values_to = "Shannon") %>% 
-#   pivot_longer(cols = starts_with("error"), names_to = "ERROR-shannon", values_to = "Shannon-error") %>%
-#   pivot_longer(cols = starts_with("lower"), names_to = "LOWER-shannon", values_to = "Shannon-lower") %>%
-#   pivot_longer(cols = starts_with("upper"), names_to = "UPPER-shannon", values_to = "Shannon-upper") %>%
-#   left_join(df$simpson %>% summary %>% 
-#       pivot_longer(cols = starts_with("estimate"), names_to = "ESTIMATE-simpson", values_to = "Simpson") %>% 
-#       pivot_longer(cols = starts_with("error"), names_to = "ERROR-simpson", values_to = "Simpson-error") %>%
-#       pivot_longer(cols = starts_with("lower"), names_to = "LOWER-simpson", values_to = "Simpson-lower") %>%
-#       pivot_longer(cols = starts_with("upper"), names_to = "UPPER-simpson", values_to = "Simpson-upper"), 
-#     by = c("sample_names" = "sample_names")) %>% 
-#   left_join(metadata_insitu %>% rownames_to_column(var = "sample_names")) %>% 
-#   select(-sample_names, -ends_with("-simpson"), -ends_with("-shannon"), -starts_with("model."), -starts_with("name.")) %>% 
-#   distinct()
-# }
-# 
-# order_alpha_18s <- fxn_extract_divet(order_divnet)
-# order_alpha_TYPE <- fxn_extract_divet(order_divnet_TYPE)
-# order_alpha_TYPE_SITE <- fxn_extract_divet(order_divnet_TYPE_SITE)
-```
-
-## Plot species richness for different sample types
-
-### All samples
-```{r Shannon and simpson for all samples plot grid, fig.height=8, fig.width=5}
-# head(order_alpha_18s)
-
-# plot_grid(order_alpha_18s %>% 
-#   # ggplot(aes(x = VENT, y = Shannon)) +
-#   ggplot(aes(x = SAMPLETYPE, y = Shannon, group = SAMPLETYPE)) +
-#   # geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
-#     # geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
-#     geom_violin(aes(fill = SAMPLETYPE), color = "#525252", alpha = 0.5, width = 0.5, draw_quantiles = c(0.25, 0.5, 0.75)) +   
-#     geom_jitter(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#     scale_fill_brewer(palette = "Set2") +
-#   theme_linedraw() +
-#   theme(axis.text.y = element_text(size = 14),
-#         axis.text.x = element_blank(),
-#         strip.background = element_blank(),
-#         strip.text = element_text(color = "black"),
-#         legend.position = "none",
-#         axis.ticks.x = element_blank()) +
-#   labs(x = "", y = "Shannon"),
-#   order_alpha_18s %>% 
-#   # ggplot(aes(x = VENT, y = Simpson)) +
-#     ggplot(aes(x = SAMPLETYPE, y = Shannon, group = SAMPLETYPE)) +
-#   # geom_errorbar(aes(ymin = `Simpson-lower`, ymax = `Simpson-upper`), color = "#525252", width = 0.2) +
-#     # geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
-#     geom_violin(aes(fill = SAMPLETYPE), color = "#525252", alpha = 0.5, width = 0.5, draw_quantiles = c(0.25, 0.5, 0.75)) +   
-#     geom_jitter(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#     scale_fill_brewer(palette = "Set2") +
-#   theme_linedraw() +
-#   theme(axis.text.x = element_text(vjust = 1, hjust = 0.5, size = 14),
-#         axis.text = element_text(size = 14),
-#         strip.background = element_blank(),
-#         strip.text = element_blank(),
-#         legend.title = element_blank(),
-#         legend.position = "bottom") +
-#   labs(x = "", y = "Simpson"),
-#   ncol = 1, axis = c("lrt"), align = c("vh"))
-```
-Save for presentation
-```{r Save Shannon all points, fig.height=5, fig.width=5}
-# svg("Shannon-violin-plot.svg",)
-# order_alpha_18s %>% 
-#   # ggplot(aes(x = VENT, y = Shannon)) +
-#   ggplot(aes(x = SAMPLETYPE, y = Shannon, group = SAMPLETYPE)) +
-#   # geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
-#     # geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
-#     geom_violin(aes(fill = SAMPLETYPE), color = "#525252", alpha = 0.5, width = 0.5, draw_quantiles = c(0.25, 0.5, 0.75)) +   
-#     geom_jitter(shape = 21, color = "#525252", size = 3, aes(fill = SAMPLETYPE)) +
-#     # scale_fill_brewer(palette = "Set2") +
-#   scale_fill_manual(values = c("#1c9099", "#fd8d3c", "#f768a1")) + 
-#   theme_linedraw() +
-#   theme(axis.text.x = element_text(vjust = 1, hjust = 0.5, size = 14),
-#         axis.text = element_text(size = 14),
-#         strip.background = element_blank(),
-#         strip.text = element_blank(),
-#         legend.title = element_blank(),
-#         legend.position = "bottom") +
-#   labs(x = "", y = "Shannon")
-# dev.off()
-```
-
-
-
-```{r Shannon and simpson by type, fig.height=5, fig.width=3}
-# head(order_alpha_TYPE)
-# plot_grid(order_alpha_TYPE %>% 
-#     select(-SAMPLELABEL, -VENT, -SITE, -TYPE_SITE, -YEAR) %>% 
-#     distinct() %>% 
-#   ggplot(aes(x = SAMPLETYPE, y = Shannon)) +
-#   geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
-#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
-#     scale_fill_brewer(palette = "Set2") +
-#   theme_linedraw() +
-#   theme(axis.text.x = element_blank(),
-#         strip.background = element_blank(),
-#         strip.text = element_text(color = "black"),
-#         legend.position = "none",
-#         axis.ticks = element_blank()) +
-#   labs(x = "", y = "Shannon"),
-#   order_alpha_TYPE %>% 
-#     select(-SAMPLELABEL, -VENT, -SITE, -TYPE_SITE, -YEAR) %>% 
-#     distinct() %>% 
-#   ggplot(aes(x = SAMPLETYPE, y = Simpson)) +
-#   geom_errorbar(aes(ymin = `Simpson-lower`, ymax = `Simpson-upper`), color = "#525252", width = 0.2) +
-#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
-#     scale_fill_brewer(palette = "Set2") +
-#   theme_linedraw() +
-#   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-#         strip.background = element_blank(),
-#         strip.text = element_blank(),
-#         legend.title = element_blank(),
-#         legend.position = "bottom") +
-#   labs(x = "", y = "Simpson"),
-#   ncol = 1, axis = c("lr"), align = c("v"))
-```
-
-```{r Shannon and simpson for all samples, fig.height=7, fig.width=4}
-# head(order_alpha_TYPE_SITE)
-# plot_grid(order_alpha_TYPE_SITE %>% 
-#     select(-SAMPLELABEL, -YEAR, -VENT) %>% 
-#     distinct() %>% 
-#   ggplot(aes(x = SAMPLETYPE, y = Shannon)) +
-#   geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
-#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   facet_grid(. ~ SITE, space = "free_x", scales = "free_x") +
-#     scale_fill_brewer(palette = "Set2") +
-#   theme_linedraw() +
-#   theme(axis.text.x = element_blank(),
-#         strip.background = element_blank(),
-#         strip.text = element_text(color = "black"),
-#         legend.position = "none",
-#         axis.ticks = element_blank()) +
-#   labs(x = "", y = "Shannon"),
-#   order_alpha_TYPE_SITE %>% 
-#     select(-SAMPLELABEL, -YEAR, -VENT) %>% 
-#     distinct() %>% 
-#   ggplot(aes(x = SAMPLETYPE, y = Simpson)) +
-#   geom_errorbar(aes(ymin = `Simpson-lower`, ymax = `Simpson-upper`), color = "#525252", width = 0.2) +
-#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
-#   facet_grid(. ~ SITE, space = "free_x", scales = "free_x") +
-#     scale_fill_brewer(palette = "Set2") +
-#   theme_linedraw() +
-#   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-#         strip.background = element_blank(),
-#         strip.text = element_blank(),
-#         legend.title = element_blank(),
-#         legend.position = "bottom") +
-#   labs(x = "", y = "Simpson"),
-#   ncol = 1, axis = c("lr"), align = c("v"))
+asv_insitu_qc %>% 
+  group_by(SAMPLEID, VENT, DATASET, SITE, SAMPLETYPE, YEAR) %>%
+    summarise(SEQ_SUM = sum(value),
+     ASV_COUNT = n()) %>% 
+  ungroup() %>% 
+  gt(
+    groupname_col = c("DATASET", "SITE", "YEAR"),
+    rowname_col = "SAMPLEID"
+  ) %>%
+  tab_header(title = "Final sequence & ASV count")
 ```
 
 # Assess ASV presence/absence
-Set up analysis to classify each ASV
+Set up analysis to classify each ASV based on distribution
 
 ```{r Classification of ASVs by dataset and sample type}
-head(asv_insitu)
+head(asv_insitu_qc)
 # head(insitu_wide)
-# unique(asv_insitu$SAMPLETYPE)
-# unique(asv_insitu$SITE)
+# unique(asv_insitu_qc$SAMPLETYPE)
+# unique(asv_insitu_qc$SITE)
 
-tax_asv_id <- asv_insitu %>% 
+tax_asv_id <- asv_insitu_qc %>% 
   filter(value > 0) %>% #remove zero values
   select(FeatureID, SITE, SAMPLETYPE) %>% # isolate only ASVs that are PRESENT at a site and sampletype
   distinct() %>% #unique this, as presense = present in at least 1 rep (where applicable)
@@ -626,15 +457,10 @@ tax_asv_id <- asv_insitu %>%
   pivot_wider(names_from = sample_id, values_from = present, values_fill = 0) %>% 
   rowwise() %>% 
   mutate_at(vars(FeatureID), factor)
-#   
-#   mutate(total = sum(c_across(where(!is.na(.))))) %>%
-#   mutate(FREQ = case_when(
-#     total == 1 ~ "Appears in only 1 sample type",
-#     total > 1 ~ "Appears in more than 1 location or sample type"
-#   ))
-# head(tax_asv_id)
+
 ```
 
+Is an ASV present only at the vent site? plume? or background? What about background and plume only?
 ```{r Assess presence of samples}
 library(purrr)
 any_cols <- function(tax_asv_id) reduce(tax_asv_id, `|`)
@@ -658,14 +484,13 @@ asv_class <- tax_asv_id %>%
 
 colnames(tax_asv_id)
 ```
-
+Binary data frame with 1 indicating presence of ASV (rows) in a given sample (columns)
 ```{r}
-head(tax_asv_id)
+# head(tax_asv_id)
 ```
 
-
+Depending on prevalence of ASV, assign groupings of location. 
 ```{r Assign ASV prevalence}
-
 asv_class_SITE <- tax_asv_id %>%
   mutate(mcr = ifelse(any_cols(across(contains("Piccard") | contains("VonDamm"), ~ . > 0)), "MCR", ""),
          axial = ifelse(any_cols(across(contains("Axial"), ~ . > 0)), "AxS", ""),
@@ -684,18 +509,19 @@ asv_class_SITE <- tax_asv_id %>%
   select(FeatureID, SITE_CLASS) %>% distinct()
 ```
 
+Combine together with original ASV table
 ```{r Combine ASV classifications}
-insitu_asv_wClass <- asv_insitu %>% 
+insitu_asv_wClass <- asv_insitu_qc %>% 
   left_join(asv_class) %>% 
   left_join(asv_class_SITE)
 # head(insitu_asv_wClass)
 ```
 
-Bubble plot
+Visualize the total number of ASVs in background, plume, versus background.
 ```{r, fig.height=4, fig.width=8, tidy=FALSE}
-# head(asv_insitu)
+# head(asv_insitu_qc)
 # svg("bubbles.svg", h = 4, w = 8)
-asv_insitu %>% 
+asv_insitu_qc %>% 
   select(DATASET, FeatureID, SAMPLETYPE) %>% 
   group_by(DATASET, SAMPLETYPE) %>% 
     summarise(COUNT = n_distinct(FeatureID)) %>% 
@@ -708,10 +534,39 @@ asv_insitu %>%
         axis.text = element_text(color = "black"))
 # dev.off()
 ```
+Bubble plot reporting the total number of ASVs found in the vent, plume, versus background. At each site, the vent protist population had a higher total number of ASVs.
 
+
+Repeat visualization by ASV distribution category.
+```{r, fig.height=8, fig.width=9}
+# head(insitu_asv_wClass)
+insitu_asv_wClass %>% 
+  select(DATASET, FeatureID, SAMPLETYPE, CLASS) %>% 
+  group_by(DATASET, SAMPLETYPE, CLASS) %>% 
+    summarise(COUNT = n_distinct(FeatureID)) %>% 
+  ggplot(aes(x = DATASET, y = SAMPLETYPE, fill = SAMPLETYPE)) +
+    geom_point(aes(size = COUNT), shape = 21, color = "black") +
+    scale_size_continuous(range = c(4,20)) +
+  scale_fill_viridis_d(option = "B") +
+  theme_void() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(color = "black"),
+        axis.title.y = element_blank()) +
+  facet_grid(SAMPLETYPE + CLASS ~ ., scales = "free", space = "free") +
+  labs(x = "", y = "", title = "Total number of ASVs by distribution & sample type")
+```
+Repeated bubble plot reports the total number of ASVs in the vent, plume, and background - but now further separated by distribution (i.e., if an ASV was found only in the vent and plume = "Vent & plume"). The largest portion of ASVs were found only at the vent sites (Vent only).
+
+Categories for ASV distribution:
 ```{r Review classification text}
 unique(insitu_asv_wClass$CLASS)
 unique(insitu_asv_wClass$SITE_CLASS)
+```
+
+# Save working ASV table
+Checkpoint to save working dataframes.
+```{r}
+save(asv_insitu, asv_insitu_qc, insitu_asv_wClass, file = "asv-tables-processed-18102021.RData")
 ```
 
 # Functions to explore community diversity
@@ -753,7 +608,7 @@ make_bar_relabun <- function(df, selection){
         legend.position = "right") +
   scale_y_continuous(expand = c(0,0)) +
   # scale_fill_brewer(palette = "Set2") +
-  scale_fill_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
+  scale_fill_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525", "#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
   labs(x = "", y = "Relative abundance")
   
   phylum <- df_out %>% 
@@ -771,8 +626,10 @@ make_bar_relabun <- function(df, selection){
   scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
     "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
     "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
-    "#807dba", "#54278f", "#bdbdbd", "black", "white", "#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
-    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45")) +
+    "#807dba", "#54278f", "#bdbdbd", "black", "white", "#969696", "#525252", "#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
+    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
+    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
+    "#807dba", "#54278f", "#bdbdbd", "black", "white")) +
   labs(x = "", y = "Relative abundance")
   supergroup + phylum + patchwork::plot_layout(ncol = 1)
 }
@@ -976,7 +833,7 @@ make_upset_plot <- function(df, selection){
   summarise(SAMPLE = list(SAMPLE)) %>% 
   ggplot(aes(x = SAMPLE)) +
     geom_bar(color = "black", width = 0.5, aes(fill = Supergroup)) +
-    scale_x_upset(n_intersections = 25) +
+    scale_x_upset(n_intersections = 35) +
   scale_y_continuous(expand = c(0,0)) +
   labs(x = "", y = "Shared ASVs") +
   theme_linedraw() +
@@ -1013,12 +870,9 @@ _Further questions to consider_
 
 Need to get metadata
 
-> Some of the Axial data had low sequence totals - is the Dependable vent one of these samples?
-
-Yes it is - probably need to remove this sample!
 ## Tile plot CLR: Axial
 
-```{r Isolate axial data and CLR, fig.height=11, fig.width=8}
+```{r Isolate axial data and CLR, fig.height=18, fig.width=7}
 make_clr_trans_tile(insitu_asv_wClass, axial)
 ```
 
@@ -1138,14 +992,85 @@ make_asv_rich(insitu_asv_wClass, all)
 make_upset_plot(insitu_asv_wClass, all)
 ```
 
-Isolate shared and unique for some combinations, but only a few - as key examples! at the ASV level.
-
 # Compare resident vs. cosmopolitan taxa
-```{r}
+
+```{r view categories}
 # head(insitu_asv_wClass) # from above, where I've classified each ASV by site and occurence in sample type
 unique(insitu_asv_wClass$CLASS)
 unique(insitu_asv_wClass$SITE_CLASS)
 unique(insitu_asv_wClass$SAMPLETYPE)
+```
+
+> What Supergroups are associated with resident vs. endemic? what about to specific sites?
+
+```{r}
+make_bar_bycategory <- function(df, category, position){
+  CATEGORY <- enquo(category)
+  df_out <- df %>% 
+  filter(Domain == "Eukaryota") %>%
+  mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
+         Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
+         Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
+         Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
+  group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
+           VENT, SITE, SAMPLETYPE, YEAR, DATASET, !!CATEGORY) %>% 
+    summarise(SEQ_AVG_REP = mean(value)) %>% 
+  ungroup()
+  ## Supergroup
+  supergroup <- df_out %>% 
+  group_by(Supergroup, !!CATEGORY) %>% 
+    summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
+  ggplot(aes(x = !!CATEGORY, y = SEQ_SUM, fill = Supergroup)) +
+    geom_bar(stat = "identity", position = position, color = "black", width = 0.9) +
+    # facet_grid(. ~ SITE +YEAR + SAMPLETYPE, scale = "free", space = "free") +
+  theme_linedraw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black"),
+        legend.position = "right") +
+  scale_y_continuous(expand = c(0,0)) +
+  # scale_fill_brewer(palette = "Set2") +
+  scale_fill_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525", "#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
+  labs(x = "", y = "Relative abundance")
+  ## Phylum
+  phylum <- df_out %>% 
+    unite(SupergroupPhylum, Supergroup, Phylum, sep = "-") %>% 
+  group_by(SupergroupPhylum, !!CATEGORY) %>% 
+    summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
+  ggplot(aes(x = !!CATEGORY, y = SEQ_SUM, fill = SupergroupPhylum)) +
+    geom_bar(stat = "identity", position = position, color = "black", width = 0.9) +
+    # facet_grid(. ~ SITE +YEAR + SAMPLETYPE, scale = "free", space = "free") +
+  theme_linedraw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black"),
+        legend.position = "right") +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
+    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
+    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
+    "#807dba", "#54278f", "#bdbdbd", "black", "white", "#969696", "#525252", "#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
+    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
+    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
+    "#807dba", "#54278f", "#bdbdbd", "black", "white")) +
+  labs(x = "", y = "Relative abundance")
+  supergroup + phylum + patchwork::plot_layout(ncol = 1)
+}
+```
+
+```{r, fig.height=12, fig.width=10}
+make_bar_bycategory(insitu_asv_wClass, CLASS, "fill")
+```
+
+```{r, fig.height=12, fig.width=10}
+make_bar_bycategory(insitu_asv_wClass, CLASS, "stack")
+```
+
+
+```{r, fig.height=12, fig.width=10}
+make_bar_bycategory(insitu_asv_wClass, SITE_CLASS, "fill")
+```
+
+```{r, fig.height=12, fig.width=10}
+make_bar_bycategory(insitu_asv_wClass, SITE_CLASS, "stack")
 ```
 
 ## Isolate shared ASVs among all
@@ -1241,12 +1166,14 @@ unique(insitu_asv_wClass$CLASS)
 unique(insitu_asv_wClass$SITE_CLASS)
 unique(insitu_asv_wClass$SAMPLETYPE)
 ```
-```{r}
+```{r, fig.height=4, fig.width=13}
+# head(insitu_asv_wClass)
 insitu_asv_wClass %>% 
   # filter(SITE %in% selection) %>%
   filter(Domain == "Eukaryota") %>% 
+  filter(!is.na(Supergroup)) %>% 
   # Average across replicates
-    group_by(FeatureID, SAMPLENAME, VENT, Supergroup, CLASS, SITE_CLASS) %>% 
+    group_by(FeatureID, SAMPLENAME, VENT, Supergroup, Phylum, CLASS, SITE_CLASS) %>% 
     summarise(AVG = mean(value)) %>% 
   separate(SAMPLENAME, c("SITE", "SAMPLETYPE", "YEAR", "Sample_tmp"), remove = TRUE) %>% 
   mutate(REGION = case_when(
@@ -1258,14 +1185,451 @@ insitu_asv_wClass %>%
     REGION == "Mid-Cayman Rise" ~ paste(SITE, VENT, sep = " "),
     REGION == "Axial" ~ paste(VENT, YEAR, sep = " ")
   )) %>% select(-Sample_tmp) %>% 
-  unite(SAMPLE, REGION, VENTNAME, sep = " ", remove = FALSE) %>% head
-  
+  unite(SAMPLE, REGION, VENTNAME, sep = " ", remove = FALSE) %>% 
+  filter(CLASS == "Vent only") %>%
+  group_by(Supergroup, SITE_CLASS) %>% 
+    summarise(SEQ_SUM = sum(AVG),
+     ASV_COUNT = n()) %>% 
+  pivot_longer(cols = c(SEQ_SUM, ASV_COUNT)) %>%
+  filter(name == "SEQ_SUM") %>%
+  ggplot(aes(x = SITE_CLASS, y = value, fill = Supergroup)) +
+    geom_hline(yintercept = 0) +
+    geom_segment(aes(x = SITE_CLASS, xend = SITE_CLASS,
+                     y = 0, yend = value, color = Supergroup),
+                 lineend = "butt", size = 1) +
+    geom_point(size = 2, shape = 19, aes(color = Supergroup)) +
+    scale_fill_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
+    scale_color_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
+    theme_bw() +
+    facet_grid(. ~ Supergroup, scales = "free") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, color = "black", size = 11),
+          axis.text.y = element_text(color = "black", size = 12),
+        panel.spacing.x = unit(0, "lines"),panel.spacing.y = unit(0, "lines"),
+        panel.border = element_blank(),
+        panel.grid = element_blank(),
+        strip.background.x = element_blank(),
+        strip.text = element_text(size = 11),
+        legend.position = "none") +
+  coord_flip() +
+  labs(x = "", y ="Total sequences", title = "Number of 'vent-only' sequences by Supergroup & location")
+# ?scale_fill_brewer
+```
+
+```{r, fig.height=4, fig.width=13}
+# head(insitu_asv_wClass)
+insitu_asv_wClass %>% 
+  # filter(SITE %in% selection) %>%
+  filter(Domain == "Eukaryota") %>% 
+  filter(!is.na(Supergroup)) %>% 
+  # Average across replicates
+    group_by(FeatureID, SAMPLENAME, VENT, Supergroup, Phylum, CLASS, SITE_CLASS) %>% 
+    summarise(AVG = mean(value)) %>% 
+  separate(SAMPLENAME, c("SITE", "SAMPLETYPE", "YEAR", "Sample_tmp"), remove = TRUE) %>% 
+  mutate(REGION = case_when(
+    SITE == "GordaRidge" ~ "Gorda Ridge",
+    SITE %in% mcr ~ "Mid-Cayman Rise",
+    SITE == "Axial" ~ "Axial")) %>% 
+  mutate(VENTNAME = case_when(
+    REGION == "Gorda Ridge" ~ VENT,
+    REGION == "Mid-Cayman Rise" ~ paste(SITE, VENT, sep = " "),
+    REGION == "Axial" ~ paste(VENT, YEAR, sep = " ")
+  )) %>% select(-Sample_tmp) %>% 
+  unite(SAMPLE, REGION, VENTNAME, sep = " ", remove = FALSE) %>% 
+  filter(CLASS == "Vent only") %>%
+  group_by(Supergroup, SITE_CLASS) %>% 
+    summarise(SEQ_SUM = sum(AVG),
+     ASV_COUNT = n()) %>% 
+  pivot_longer(cols = c(SEQ_SUM, ASV_COUNT)) %>%
+  filter(name != "SEQ_SUM") %>%
+  ggplot(aes(x = SITE_CLASS, y = value, fill = Supergroup)) +
+    geom_hline(yintercept = 0) +
+    geom_segment(aes(x = SITE_CLASS, xend = SITE_CLASS,
+                     y = 0, yend = value, color = Supergroup),
+                 lineend = "butt", size = 1) +
+    geom_point(size = 2, shape = 19, aes(color = Supergroup)) +
+    scale_fill_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
+    scale_color_manual(values = c("#fa9fb5", "#c51b8a", "#67000d", "#ef3b2c", "#ffffcc", "#feb24c", "#c7e9b4", "#1d91c0", "#253494", "#9e9ac8", "#238b45", "#54278f", "#bdbdbd", "#252525")) +
+    theme_bw() +
+    facet_grid(. ~ Supergroup, scales = "free") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, color = "black", size = 11),
+          axis.text.y = element_text(color = "black", size = 12),
+        panel.spacing.x = unit(0, "lines"),panel.spacing.y = unit(0, "lines"),
+        panel.border = element_blank(),
+        panel.grid = element_blank(),
+        strip.background.x = element_blank(),
+        strip.text = element_text(size = 11),
+        legend.position = "none") +
+  coord_flip() +
+  labs(x = "", y ="Total ASVs", title = "Number of 'vent-only' ASVs by Supergroup & location")
+# ?scale_fill_brewer
+```
+
+# Incorporate metadata parameters.
+
+Import grazing data as output from previous, plot with bubbles underneath of specific parameters.
+```{r}
+load("asv-tables-processed-16102021.RData", verbose = T)
+# head(asv_insitu_qc)
+head(asv_insitu_qc %>% select(SAMPLENAME, TEMP, pH, Mg, ProkConc) %>% distinct())
+```
+
+## Temperature & prokaryote cell concentration
+
+Plot sequence relative abundance by temperature and prokaryote concentration. These two parameters were chosen because I have the most metadata from them. If a sample was not countable or had no temperature record, it was removed.
+
+### Plot as a factor of relative sequence abundance
+```{r, fig.height=15, fig.width=20, tidy=FALSE}
+asv_insitu_qc %>% 
+    # filter(SITE %in% selection) %>% 
+    filter(!is.na(TEMP)) %>% 
+    filter(!is.na(ProkConc)) %>% 
+    filter(Domain == "Eukaryota") %>%
+    mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
+           Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
+           Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
+           Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
+    group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
+             VENT, SITE, SAMPLETYPE, YEAR, DATASET, TEMP, ProkConc) %>% 
+    summarise(SEQ_AVG_REP = mean(value)) %>% 
+    ungroup() %>% 
+    unite(SupergroupPhylum, Supergroup, Phylum, sep = "-") %>% 
+    group_by(SITE, SAMPLETYPE, VENT, YEAR, SupergroupPhylum, TEMP, ProkConc) %>% 
+      summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
+    ggplot(aes(x = ProkConc, y = as.numeric(TEMP), fill = SITE, shape = SAMPLETYPE)) +
+      geom_point(color = "black", aes(size = SEQ_SUM)) +
+      scale_size_continuous(range = c(4,9)) +
+      scale_shape_manual(values = c(21, 23, 24)) +
+      scale_x_log10() +
+      facet_wrap(SupergroupPhylum ~., scale = "free") +
+      theme_linedraw() +
+      theme(axis.text = element_text(color = "black", size = 12),
+          strip.background = element_blank(), strip.text = element_text(color = "black"),
+          legend.position = "right") +
+    # scale_y_continuous(expand = c(0,0)) +
+    scale_fill_manual(values = c("#feb24c", "#addd8e", "#de2d26", "#1c9099")) +
+    guides(fill = guide_legend(override.aes = list(shape = c(21))),
+           shape = guide_legend(override.aes = list(fill = "black"))) +
+    labs(x = bquote("Cells "~mL^-1 ~hr^-1), y = "Temperature (C)")
+```
+
+### Plot as a factor of CLR transformed data
+Repeat above plot, but with CLR transformed data.
+```{r, fig.height=15, fig.width=20, tidy=FALSE}
+df_wide_tmp <- asv_insitu_qc %>% 
+    filter(!is.na(TEMP)) %>% 
+    filter(!is.na(ProkConc)) %>% 
+    filter(Domain == "Eukaryota") %>% 
+    filter(value > 0) %>% 
+  # Average across replicates
+      group_by(FeatureID, SAMPLENAME, VENT, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species, TEMP, ProkConc) %>% 
+        summarise(AVG = mean(value)) %>% 
+      ungroup() %>% 
+    # Sum to the Order taxonomic classification
+    unite(SAMPLENAME_2, SAMPLENAME, VENT, TEMP, ProkConc, sep = "_") %>% 
+    unite(TAX, FeatureID, Supergroup, Phylum, sep = " ") %>% 
+    select(TAX, SAMPLENAME_2, AVG) %>% 
+    pivot_wider(names_from = SAMPLENAME_2, values_from = AVG, values_fill = 0) %>% 
+    column_to_rownames(var = "TAX")
+
+  ## Take wide data frame and CLR transform, pivot to wide, and plot
+  clr_long_df <- data.frame(compositions::clr(df_wide_tmp)) %>% 
+      rownames_to_column(var = "TAX") %>%
+      pivot_longer(cols = starts_with(all), values_to = "CLR", names_to = "SAMPLENAME_2") %>% 
+      separate(SAMPLENAME_2, c("SAMPLENAME", "VENT", "TEMP", "ProkConc"), sep = "_") %>% 
+      separate(SAMPLENAME, c("SITE", "SAMPLETYPE", "YEAR", "Sample_tmp"), remove = TRUE) %>% 
+      mutate(VENT = str_replace_all(VENT, "\\.", " ")) %>% 
+      mutate(REGION = case_when(
+        SITE == "GordaRidge" ~ "Gorda Ridge",
+        SITE %in% mcr ~ "Mid-Cayman Rise",
+        SITE == "Axial" ~ "Axial")) %>% 
+      mutate(VENTNAME = case_when(
+        REGION == "Gorda Ridge" ~ VENT,
+        REGION == "Mid-Cayman Rise" ~ paste(SITE, VENT, sep = " "),
+        REGION == "Axial" ~ paste(VENT, YEAR, sep = " ")
+      )) %>% select(-Sample_tmp) %>% 
+    unite(SAMPLE, REGION, VENTNAME, sep = " ", remove = FALSE) %>% 
+    separate(TAX, c("ASVid","Supergroup", "Phylum"), sep = " ", remove = TRUE) %>% 
+    unite(SupergroupPhylum, Supergroup, Phylum, sep = "-")
+
+  # head(clr_long_df)
+  ## Plot
+  clr_long_df %>% 
+    filter(SAMPLETYPE == "Vent") %>% 
+    ggplot(aes(x = as.numeric(ProkConc), y = as.numeric(TEMP), fill = CLR, shape = REGION)) +
+      geom_point(color = "black", size = 3, aes(fill = CLR, shape = REGION)) +
+      scale_fill_gradient2(low = "#4575b4", mid = "white", high = "#d73027", na.value = "grey50") +
+      scale_shape_manual(values = c(21, 23, 24, 25)) +
+      scale_x_log10() +
+      facet_wrap(SupergroupPhylum ~ ., scale = "free") +
+      theme_linedraw() +
+      theme(axis.text = element_text(color = "black", size = 12),
+          strip.background = element_blank(), strip.text = element_text(color = "black"),
+          legend.position = "right") +
+    guides(fill = guide_legend(override.aes = list(shape = c(21))),
+           shape = guide_legend(override.aes = list(fill = "black"))) +
+    labs(x = bquote("Cells "~mL^-1 ~hr^-1), y = "Temperature (C)")
 ```
 
 
 
-# Incorporate grazing data and metadata
-Compare bubble plots with various metadata parameters.
+## Grazing rate (Gorda Ridge & MCR only)
+
+_pending_
+
+## Isolate vent-only / endemic protist signatures
+
+_pending_
+CLR to triangle plot?
+triangle plot with relative abundance - are there distinct signatures of vent endemics by region?? Are there clusters on the triangle plot??
+
+# HPC analysis code below
+Diversity model/estimation and network analysis to be run on HPC.
+
+```{r Load from local, eval=FALSE}
+load("asv-tables-processed-16102021.RData", verbose = T)
+```
 
 
-Import grazing data as output from previous, plot with bubbles underneath of specific parameters.
+# Diversity estimators
+DivNet package - diversity estimation hypothesis testing from Amy Willis's group. This will also characterize the uncertainty of the richness estimate. Richness estimation is flawed because of sample depth and processing methods.
+
+```{r Load librarys for richness estimation, eval=FALSE}
+library(phyloseq); library(breakaway); library(DivNet)
+
+# Select eukaryotes only and create wide format dataframe
+insitu_wide <- asv_insitu_qc %>% 
+  filter(Domain == "Eukaryota") %>% 
+  filter(!grepl("_Plume001_", SAMPLE)) %>% #removing "near vent background", not relevant in other data sets
+  select(FeatureID, Taxon, SAMPLE, value) %>%
+  pivot_wider(names_from = SAMPLE, values_from = value, values_fill = 0)
+
+# head(insitu_wide)
+insitu_samples <- as.character(colnames(insitu_wide %>% select(-Taxon, -FeatureID)))
+# insitu_samples
+```
+
+```{r Isolate matrix for asvs and taxa, eval=FALSE}
+insitu_tax_matrix <- insitu_wide %>%
+  select(FeatureID, Taxon) %>% 
+  separate(Taxon, c("Domain", "Supergroup", 
+                  "Phylum", "Class", "Order",
+                  "Family", "Genus", "Species"), sep = ";") %>% 
+  column_to_rownames(var = "FeatureID") %>% 
+  as.matrix
+
+insitu_asv_matrix <- insitu_wide %>% 
+  select(-Taxon) %>% 
+  column_to_rownames(var = "FeatureID") %>% 
+  as.matrix
+
+# Align row names for each matrix
+rownames(insitu_tax_matrix) <- row.names(insitu_asv_matrix)
+
+## Extract relevant metadata information
+# head(metadata)
+metadata_insitu <- metadata %>%
+  filter(SAMPLE %in% insitu_samples) %>% # from reformatting df above
+  select(SAMPLE, VENT, SITE, SAMPLETYPE, YEAR) %>%
+  unite(SAMPLELABEL, VENT, SITE, SAMPLETYPE, YEAR, sep = "_", remove = FALSE) %>% 
+  unite(TYPE_SITE, SITE, SAMPLETYPE, sep = "_", remove = FALSE)
+# View(metadata_insitu)
+```
+
+```{r Phyloseq import contined, eval=FALSE}
+# Import asv and tax matrices
+ASV = otu_table(insitu_asv_matrix, taxa_are_rows = TRUE)
+TAX = tax_table(insitu_tax_matrix)
+phylo_obj <- phyloseq(ASV, TAX)
+
+
+# Import metadata as sample data in phyloseq
+samplenames <- sample_data(metadata_insitu)
+# View(samplenames)
+
+# join as phyloseq object
+physeq_insitu = merge_phyloseq(phylo_obj, samplenames)
+
+## Check
+physeq_insitu
+# head(tax_matrix[1:2,])
+```
+Note options to apply divnet to 
+
+```{r Apply divnet, eval=FALSE}
+# Glom tax levels at the Order level, then perform divnet analysis
+# order_divnet <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), base = 3)
+# order_divnet <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), X = "SAMPLELABEL", base = 3)
+# order_divnet_TYPE <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), X = "SAMPLETYPE", base = 3)
+# order_divnet_TYPE_SITE <- divnet(tax_glom(physeq_insitu, taxrank = "Order"), X = "TYPE_SITE", base = 3)
+
+# fam_divnet <- divnet(tax_glom(physeq_insitu, taxrank = "Family"), base = 3)
+```
+
+
+```{r extract shannon and simpson from divnet output, eval=FALSE}
+# head(metadata_insitu)
+  
+# fxn_extract_divet <- function(df){
+#   df$shannon %>% summary %>% 
+#   pivot_longer(cols = starts_with("estimate"), names_to = "ESTIMATE-shannon", values_to = "Shannon") %>% 
+#   pivot_longer(cols = starts_with("error"), names_to = "ERROR-shannon", values_to = "Shannon-error") %>%
+#   pivot_longer(cols = starts_with("lower"), names_to = "LOWER-shannon", values_to = "Shannon-lower") %>%
+#   pivot_longer(cols = starts_with("upper"), names_to = "UPPER-shannon", values_to = "Shannon-upper") %>%
+#   left_join(df$simpson %>% summary %>% 
+#       pivot_longer(cols = starts_with("estimate"), names_to = "ESTIMATE-simpson", values_to = "Simpson") %>% 
+#       pivot_longer(cols = starts_with("error"), names_to = "ERROR-simpson", values_to = "Simpson-error") %>%
+#       pivot_longer(cols = starts_with("lower"), names_to = "LOWER-simpson", values_to = "Simpson-lower") %>%
+#       pivot_longer(cols = starts_with("upper"), names_to = "UPPER-simpson", values_to = "Simpson-upper"), 
+#     by = c("sample_names" = "sample_names")) %>% 
+#   left_join(metadata_insitu %>% rownames_to_column(var = "sample_names")) %>% 
+#   select(-sample_names, -ends_with("-simpson"), -ends_with("-shannon"), -starts_with("model."), -starts_with("name.")) %>% 
+#   distinct()
+# }
+# 
+# order_alpha_18s <- fxn_extract_divet(order_divnet)
+# order_alpha_TYPE <- fxn_extract_divet(order_divnet_TYPE)
+# order_alpha_TYPE_SITE <- fxn_extract_divet(order_divnet_TYPE_SITE)
+```
+
+## Plot species richness for different sample types
+
+### All samples
+```{r Shannon and simpson for all samples plot grid, fig.height=8, fig.width=5, eval=FALSE}
+# head(order_alpha_18s)
+
+# plot_grid(order_alpha_18s %>% 
+#   # ggplot(aes(x = VENT, y = Shannon)) +
+#   ggplot(aes(x = SAMPLETYPE, y = Shannon, group = SAMPLETYPE)) +
+#   # geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
+#     # geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
+#     geom_violin(aes(fill = SAMPLETYPE), color = "#525252", alpha = 0.5, width = 0.5, draw_quantiles = c(0.25, 0.5, 0.75)) +   
+#     geom_jitter(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#     scale_fill_brewer(palette = "Set2") +
+#   theme_linedraw() +
+#   theme(axis.text.y = element_text(size = 14),
+#         axis.text.x = element_blank(),
+#         strip.background = element_blank(),
+#         strip.text = element_text(color = "black"),
+#         legend.position = "none",
+#         axis.ticks.x = element_blank()) +
+#   labs(x = "", y = "Shannon"),
+#   order_alpha_18s %>% 
+#   # ggplot(aes(x = VENT, y = Simpson)) +
+#     ggplot(aes(x = SAMPLETYPE, y = Shannon, group = SAMPLETYPE)) +
+#   # geom_errorbar(aes(ymin = `Simpson-lower`, ymax = `Simpson-upper`), color = "#525252", width = 0.2) +
+#     # geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
+#     geom_violin(aes(fill = SAMPLETYPE), color = "#525252", alpha = 0.5, width = 0.5, draw_quantiles = c(0.25, 0.5, 0.75)) +   
+#     geom_jitter(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#     scale_fill_brewer(palette = "Set2") +
+#   theme_linedraw() +
+#   theme(axis.text.x = element_text(vjust = 1, hjust = 0.5, size = 14),
+#         axis.text = element_text(size = 14),
+#         strip.background = element_blank(),
+#         strip.text = element_blank(),
+#         legend.title = element_blank(),
+#         legend.position = "bottom") +
+#   labs(x = "", y = "Simpson"),
+#   ncol = 1, axis = c("lrt"), align = c("vh"))
+```
+Save for presentation
+```{r Save Shannon all points, fig.height=5, fig.width=5, eval=FALSE}
+# svg("Shannon-violin-plot.svg",)
+# order_alpha_18s %>% 
+#   # ggplot(aes(x = VENT, y = Shannon)) +
+#   ggplot(aes(x = SAMPLETYPE, y = Shannon, group = SAMPLETYPE)) +
+#   # geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
+#     # geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
+#     geom_violin(aes(fill = SAMPLETYPE), color = "#525252", alpha = 0.5, width = 0.5, draw_quantiles = c(0.25, 0.5, 0.75)) +   
+#     geom_jitter(shape = 21, color = "#525252", size = 3, aes(fill = SAMPLETYPE)) +
+#     # scale_fill_brewer(palette = "Set2") +
+#   scale_fill_manual(values = c("#1c9099", "#fd8d3c", "#f768a1")) + 
+#   theme_linedraw() +
+#   theme(axis.text.x = element_text(vjust = 1, hjust = 0.5, size = 14),
+#         axis.text = element_text(size = 14),
+#         strip.background = element_blank(),
+#         strip.text = element_blank(),
+#         legend.title = element_blank(),
+#         legend.position = "bottom") +
+#   labs(x = "", y = "Shannon")
+# dev.off()
+```
+
+
+
+```{r Shannon and simpson by type, fig.height=5, fig.width=3, eval=FALSE}
+# head(order_alpha_TYPE)
+# plot_grid(order_alpha_TYPE %>% 
+#     select(-SAMPLELABEL, -VENT, -SITE, -TYPE_SITE, -YEAR) %>% 
+#     distinct() %>% 
+#   ggplot(aes(x = SAMPLETYPE, y = Shannon)) +
+#   geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
+#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
+#     scale_fill_brewer(palette = "Set2") +
+#   theme_linedraw() +
+#   theme(axis.text.x = element_blank(),
+#         strip.background = element_blank(),
+#         strip.text = element_text(color = "black"),
+#         legend.position = "none",
+#         axis.ticks = element_blank()) +
+#   labs(x = "", y = "Shannon"),
+#   order_alpha_TYPE %>% 
+#     select(-SAMPLELABEL, -VENT, -SITE, -TYPE_SITE, -YEAR) %>% 
+#     distinct() %>% 
+#   ggplot(aes(x = SAMPLETYPE, y = Simpson)) +
+#   geom_errorbar(aes(ymin = `Simpson-lower`, ymax = `Simpson-upper`), color = "#525252", width = 0.2) +
+#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   # facet_grid(. ~ SITE + SAMPLETYPE + YEAR, space = "free_x", scales = "free_x") +
+#     scale_fill_brewer(palette = "Set2") +
+#   theme_linedraw() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+#         strip.background = element_blank(),
+#         strip.text = element_blank(),
+#         legend.title = element_blank(),
+#         legend.position = "bottom") +
+#   labs(x = "", y = "Simpson"),
+#   ncol = 1, axis = c("lr"), align = c("v"))
+```
+
+```{r Shannon and simpson for all samples, fig.height=7, fig.width=4, eval=FALSE}
+# head(order_alpha_TYPE_SITE)
+# plot_grid(order_alpha_TYPE_SITE %>% 
+#     select(-SAMPLELABEL, -YEAR, -VENT) %>% 
+#     distinct() %>% 
+#   ggplot(aes(x = SAMPLETYPE, y = Shannon)) +
+#   geom_errorbar(aes(ymin = `Shannon-lower`, ymax = `Shannon-upper`), color = "#525252", width = 0.2) +
+#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   facet_grid(. ~ SITE, space = "free_x", scales = "free_x") +
+#     scale_fill_brewer(palette = "Set2") +
+#   theme_linedraw() +
+#   theme(axis.text.x = element_blank(),
+#         strip.background = element_blank(),
+#         strip.text = element_text(color = "black"),
+#         legend.position = "none",
+#         axis.ticks = element_blank()) +
+#   labs(x = "", y = "Shannon"),
+#   order_alpha_TYPE_SITE %>% 
+#     select(-SAMPLELABEL, -YEAR, -VENT) %>% 
+#     distinct() %>% 
+#   ggplot(aes(x = SAMPLETYPE, y = Simpson)) +
+#   geom_errorbar(aes(ymin = `Simpson-lower`, ymax = `Simpson-upper`), color = "#525252", width = 0.2) +
+#     geom_point(shape = 21, color = "#525252", size = 2, aes(fill = SAMPLETYPE)) +
+#   facet_grid(. ~ SITE, space = "free_x", scales = "free_x") +
+#     scale_fill_brewer(palette = "Set2") +
+#   theme_linedraw() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+#         strip.background = element_blank(),
+#         strip.text = element_blank(),
+#         legend.title = element_blank(),
+#         legend.position = "bottom") +
+#   labs(x = "", y = "Simpson"),
+#   ncol = 1, axis = c("lr"), align = c("v"))
+```
+
+
+# Network analysis
+
+## 
