@@ -852,7 +852,7 @@ make_upset_plot <- function(df, selection){
 
 # Axial Seamount analysis
 
-
+- What should I do with the year to year comparison? 
 
 ## Bar plot relative abundance: Axial
 
@@ -876,10 +876,14 @@ Need to get metadata
 make_clr_trans_tile(insitu_asv_wClass, axial)
 ```
 
+Tile plot goes to the Class taxonomic level. Here at Axial, mostly the ciliate class had higher CLR values (more enriched relative to the data mean). Second to ciliates were cercozoa. Also noticing how Marker 113 2013 and 2015 are more similar to each other than 2014? 
+
 ## PCA: Axial
 ```{r est eigenvalues axial, fig.height=6, fig.width=8}
 make_pca(insitu_asv_wClass, axial)
 ```
+
+While we only have 1 plume and bsw each for Axial, they are grouping together - away from vents. So that is an expected signature and likely consistent with the other sites. These colors are a little confusing, it does look like Boca is an outlier.
 
 ## ASV richness: Axial
 
@@ -900,7 +904,7 @@ make_upset_plot(insitu_asv_wClass, axial)
 
 ## Bar plot relative abundance: MCR
 
-```{r Barplot MCR, tidy=FALSE, fig.height=10, fig.width=11}
+```{r Barplot MCR, fig.height=10, fig.width=11}
 make_bar_relabun(insitu_asv_wClass, mcr)
 ```
 
@@ -990,7 +994,53 @@ make_asv_rich(insitu_asv_wClass, all)
 ## Presence-absence: all
 ```{r upsetR all, fig.width=12, fig.height=8}
 make_upset_plot(insitu_asv_wClass, all)
+# head(insitu_asv_wClass)
+
 ```
+Repeat above plot, but resolve by sample location and sample type.
+```{r, fig.width=12, fig.height=8}
+insitu_asv_wClass %>% 
+  filter(SITE %in% all) %>%
+  filter(Domain == "Eukaryota") %>% 
+  # Average across replicates
+    group_by(FeatureID, SAMPLENAME, VENT, Supergroup) %>% 
+    summarise(AVG = mean(value)) %>% 
+  separate(SAMPLENAME, c("SITE", "SAMPLETYPE", "YEAR", "Sample_tmp"), remove = TRUE) %>% 
+  mutate(REGION = case_when(
+    SITE == "GordaRidge" ~ "Gorda Ridge",
+    SITE %in% mcr ~ "Mid-Cayman Rise",
+    SITE == "Axial" ~ "Axial")) %>% 
+  mutate(VENTNAME = case_when(
+    REGION == "Gorda Ridge" ~ VENT,
+    REGION == "Mid-Cayman Rise" ~ paste(SITE, VENT, sep = " "),
+    REGION == "Axial" ~ paste(VENT, YEAR, sep = " ")
+  )) %>% select(-Sample_tmp) %>% 
+  unite(SAMPLE, REGION, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
+  group_by(FeatureID, Supergroup, SAMPLE) %>% 
+    summarise(SUM = sum(AVG)) %>%
+  ungroup() %>% 
+  distinct(FeatureID, Supergroup, SUM, SAMPLE, .keep_all = TRUE) %>% 
+  group_by(FeatureID, Supergroup) %>% 
+  summarise(SAMPLE = list(SAMPLE)) %>% 
+  ggplot(aes(x = SAMPLE)) +
+    geom_bar(color = "black", width = 0.5, aes(fill = Supergroup)) +
+    scale_x_upset(n_intersections = 35) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x = "", y = "Shared ASVs") +
+  theme_linedraw() +
+  theme(axis.text = element_text(color="black", size=10),
+        axis.title = element_text(color="black", size=10),
+        legend.text = element_text(color = "black", size = 10),
+        plot.margin = margin(1, 1, 1, 5, "cm")) +
+    scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
+    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
+    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
+    "#807dba", "#54278f", "#bdbdbd", "black"))
+```
+Observations regarding above plot:
+- Axial and Gorda Ridge vent sites have more shared ASVs than any other pairwise comparison. After this, there were also many ASVs shared throughout MCR (vent, plume, + background). *May be a reflection of sample size, as MCR had more vent sites*
+- a small subset of ASVs were found at all vent sites or all samples. 
+- ASVs within the vents had much higher unique # of ASVs (not shared with another habitat type) than any other sample type/location (furtherest left bars).
 
 # Compare resident vs. cosmopolitan taxa
 
@@ -1382,11 +1432,49 @@ _pending_
 CLR to triangle plot?
 triangle plot with relative abundance - are there distinct signatures of vent endemics by region?? Are there clusters on the triangle plot??
 
+Subset dataset to create endemic dataset and a vent inclusive dataset.
+```{r subset vent only datasets}
+# head(insitu_asv_wClass)
+# unique(insitu_asv_wClass$CLASS)
+
+vent_endemic <- insitu_asv_wClass %>% 
+  filter(CLASS == "Vent only")
+# unique(vent_endemic$SAMPLETYPE)
+
+vent_broad <- insitu_asv_wClass %>% 
+  filter(SAMPLETYPE == "Vent")
+
+length(unique(vent_broad$FeatureID))
+length(unique(vent_endemic$FeatureID))
+sum(vent_broad$value)
+sum(vent_endemic$value)
+```
+
+```{r, fig.height=10, fig.width=16}
+make_bar_relabun(vent_endemic, all)
+```
+
+```{r, fig.height=10, fig.width=16}
+make_bar_relabun(vent_broad, all)
+```
+
+
+```{r, fig.width=10, fig.height=6}
+make_pca(vent_endemic, all)
+```
+
+```{r, fig.width=10, fig.height=6}
+make_pca(vent_broad, all)
+```
+```{r, fig.width=10, fig.height=6}
+make_pca(vent_endemic, axial)
+```
+
 # HPC analysis code below
 Diversity model/estimation and network analysis to be run on HPC.
 
 ```{r Load from local, eval=FALSE}
-load("asv-tables-processed-16102021.RData", verbose = T)
+load("asv-tables-processed-18102021.RData", verbose = T)
 ```
 
 
