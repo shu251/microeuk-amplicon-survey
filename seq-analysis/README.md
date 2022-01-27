@@ -204,4 +204,37 @@ qiime tools export \
 
 Move to R to compile, use phyloseq, and additional QC steps. All code is in ```asv-data-processing.Rmd```
 
+
+_Summary of steps_: Pre-processing of ASV count table, including joining sequence count per sample information with taxonomic assignments, and environmental metadata. With sequenced blanks, use decontam to remove putative contaminant ASVs, then filter all samples by total sequence threshold. Visualize total sequences and ASVs before and after these steps. Additionally, assign ASV classifications based on distribution (i.e., cosmopolitan vs. resident, GR and Axial vs. MCR?). Final step saves QCed and classified ASV table as an R object in "input data" for main data analysis to be complete. See: https://shu251.github.io/microeuk-amplicon-survey/
+
+
+Output table for total ASVs and sequences before QC ```../output-tables/seq_asv_count_nonQC.html```
+
 ## 4. Remove contaminate sequences
+
+Using ```decontam``` R package, remove ASVs that were present at 50% more abundance in negative controls compared to biological samples. This removed 56 ASVs.
+
+>   Started with 17934 ASVs, post-decontamination, we have 17878 (a loss
+    of 56 ASVs).
+
+>   Data started with 3817219 sequences, after removing 56 ASVs, we have
+    3788791 total sequences. There was a total loss of 0.74% of
+    sequences.
+
+>   Final in situ dataset includes 3.79 million sequences and 12,378 ASVs total.
+
+
+
+Generated a barplot with overview of taxonomy before removing samples with too few sequences.
+
+
+Remove samples with too few sequences (threshold = 20000 sequences). Samples: Axial_Dependable_FS900_2013 and
+GordaRidge_BSW020_sterivex_2019_REPa removed due to too few sequences.
+
+
+Output table for QCed ASVs and sequences ```../output-tables/seq_asv_count_postQC.html```.
+
+
+## 5. Assess ASV distribution
+
+ASVs were not present in all samples. Classify ASV distribution by assigning presence/absence of ASVs across vent samples, background samples, and various vent sites. 

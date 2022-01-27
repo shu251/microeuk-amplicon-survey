@@ -60,8 +60,19 @@ metadata_formatted <- metadata %>%
   filter(Sample_or_Control == "Sample") %>% 
   filter(!(SAMPLETYPE == "Incubation")) %>% 
   filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
-  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater, Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc, Sample_or_Control)
+  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc, Sample_or_Control)
 ```
+
+
+ Units for the variables are as follows:
+ - Temp = Celsius
+ - Percent Seawater = %
+ - Mg = mmol/kg (or mM)
+ - H2 = µmol/L (or µM)
+ - H2S = mmol/L (or mM)
+ - CH4 = µmol/L (or µM)
+ - ProkConc = cells/ml
+
 
 Remove samples from Gorda Ridge microcolonizers and from the FLP
 experiments (Gorda Ridge and Mid-Cayman Rise).
@@ -154,7 +165,7 @@ table_raw_stats <- asv_wtax %>% filter(value > 0) %>%
     rowname_col = "SAMPLENAME"
   )
 table_raw_stats
-gtsave(table_raw_stats, filename = "seq_asv_count_nonQC.html", path = "output-tables/")
+gtsave(table_raw_stats, filename = "seq_asv_count_nonQC.html", path = "../output-tables/")
 ```
 
 > After removing contaminate ASVs below, I will set threshold of 10,000
@@ -231,8 +242,7 @@ table(contam_prev$contaminant)
 > 0.5 - this threshold will ID contaminants in all samples that are more
 > prevalent in negative controls than in positive samples.
 
-*As of Dec 30 2021*: 56 ASVs deemed to be contaminant and will be
-removed.
+*As of Dec 30 2021*: 56 ASVs deemed to be contaminant and will be removed.
 
 ### Remove problematic ASVs
 
@@ -527,8 +537,7 @@ asv_class <- tax_asv_id %>%
 colnames(tax_asv_id)
 ```
 
-Binary data frame with 1 indicating presence of ASV (rows) in a given
-sample (columns)
+Binary data frame with 1 indicating presence of ASV (rows) in a given sample (columns)
 
 Depending on prevalence of ASV, assign groupings of location.
 
@@ -575,8 +584,7 @@ insitu_asv_wClass <- asv_insitu_qc %>%
 # head(insitu_asv_wClass)
 ```
 
-Visualize the total number of ASVs in background, plume, versus
-background.
+Visualize the total number of ASVs in background, plume, versus background.
 
 ```{r, fig.height=4, fig.width=8, tidy=FALSE, eval=FALSE}
 # head(asv_insitu_qc)
@@ -638,5 +646,5 @@ sum(insitu_asv_wClass$value)
 Checkpoint to save working dataframes.
 
 ```{r, eval=FALSE}
-save(asv_insitu, asv_insitu_qc, insitu_asv_wClass, file = "../data-input/asv-tables-processed-18102021.RData")
+save(asv_insitu, asv_insitu_qc, insitu_asv_wClass, file = "../data-input/asv-tables-processed-27012022.RData")
 ```
