@@ -1,0 +1,642 @@
+---
+title: "Process QIMME2 output, run decontam"
+author: "Sarah Hu"
+date: "1/26/2022"
+output: html_document
+---
+
+
+**Description**: Pre-processing of ASV count table, including joining sequence count per sample information with taxonomic assignments, and environmental metadata. With sequenced blanks, use decontam to remove putative contaminant ASVs, then filter all samples by total sequence threshold. Visualize total sequences and ASVs before and after these steps. Additionally, assign ASV classifications based on distribution (i.e., cosmopolitan vs. resident, GR and Axial vs. MCR?). Final step saves QCed and classified ASV table as an R object in "input data" for main data analysis to be complete. See: https://shu251.github.io/microeuk-amplicon-survey/
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = FALSE, message = FALSE)
+```
+
+```{r Library loading initial, echo=FALSE, message=FALSE}
+library(tidyverse); library(cowplot)
+library(phyloseq); library(decontam)
+library(compositions); library(patchwork); 
+library(ggupset); library(gt)
+library(plotly); library(viridis); library(vegan)
+```
+
+# Import exisiting sequence data
+
+Datasets included: - Gorda Ridge 2019 cruise - Axial Seamount time
+series - 2013, 2014, & 2015 - Mid-Cayman Rise 2020 cruise
+
+All data generated from extracted RNA, reverse transcribed to cDNA and
+amplified with primers that target the V4 hypervariable region on the
+18S rRNA gene.
+
+Analysis done with QIIME2, kept 40-60% of the sequences through the QC
+process and generated Amplicon Sequence Variants (ASVs) with DADA2.
+Taxonomic assignment done with vsearch using the PR2 database (v4.14) at
+80% identity. See the `seq-analysis` directory for QIIME2 code.
+
+## Merged data from QIIME2 analysis
+
+After determining ASVs for each sequence run, ASV tables were merged.
+
+```{r Import taxonomy and ASV table, message=FALSE, eval=FALSE}
+merged_tax <- read_delim("../data-input/taxonomy.tsv", delim = "\t")
+merged_asv <- read_delim("../data-input/microeuk-merged-asv-table.tsv", delim = "\t", skip = 1)
+# head(merged_tax)
+```
+
+### Import metadata & reformat
+
+Metadata (last update 26-01-2022), compiled from several different sources.
+
+```{r}
+metadata <- read.delim("../data-input/samplelist-metadata.txt", na.strings = "")
+```
+Note that some of it is not numeric and will require downstream culling, as many 'no data available' samples exist.
+
+```{r}
+metadata_formatted <- metadata %>% 
+  mutate_all(as.character) %>%
+  filter(Sample_or_Control == "Sample") %>% 
+  filter(!(SAMPLETYPE == "Incubation")) %>% 
+  filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
+  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater, Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc, Sample_or_Control)
+```
+
+Remove samples from Gorda Ridge microcolonizers and from the FLP
+experiments (Gorda Ridge and Mid-Cayman Rise).
+
+```{r Join taxonomy and ASV data, eval=FALSE}
+asv_wtax <- merged_asv %>%
+  select(FeatureID = '#OTU ID', everything()) %>%
+  pivot_longer(cols = !FeatureID,
+               names_to = "SAMPLE", values_to = "value") %>%
+  left_join(merged_tax, by = c("FeatureID" = "Feature ID")) %>%
+  left_join(metadata_formatted) %>%
+  filter(!grepl("Siders_", SAMPLE)) %>% 
+  filter(SAMPLETYPE != "Incubation") %>% 
+  filter(SAMPLETYPE != "Microcolonizer") %>%
+  mutate(DATASET = case_when(
+    grepl("_GR_", SAMPLE) ~ "GR",
+    grepl("Gorda", SAMPLE) ~ "GR",
+    grepl("_MCR_", SAMPLE) ~ "MCR",
+    grepl("Axial", SAMPLE) ~ "Axial",
+  TRUE ~ "Control or blank")) %>%
+    separate(Taxon, c("Domain", "Supergroup",
+                  "Phylum", "Class", "Order",
+                  "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>% 
+  unite(SAMPLENAME, SITE, SAMPLETYPE, YEAR, VENT, SAMPLEID, sep = " ", remove = FALSE)
+
+# View(asv_wtax)
+# head(asv_wtax) ## Complete ASV table with full taxonomy names and annotated sample information
+```
+
+### Total number of sequences
+
+Barplots to show total number of sequences and total number of ASVs.
+
+Total number of sequences and ASVs parallel each other. The Axial and
+Gorda Ridge data were run on the same sequence run, with Mid-Cayman Rise
+run on a separate MiSeq run - so the average number of sequences (and
+ASVs) varies between these two runs. A few samples have too few
+sequences, they will be removed below.
+
+This newest version of PR2 has bacteria and archaea in it. Very, very
+few were assigned to this. Majority assigned to eukaryotes.
+
+```{r Plot total ASV and sequences, eval=FALSE, fig.height=11, fig.width=14}
+# head(asv_wtax)
+library(viridis)
+plot_grid(
+  # Total number of ASVs
+  asv_wtax %>% 
+  filter(value > 0) %>% 
+  filter(Sample_or_Control == "Sample") %>% 
+  ggplot(aes(x = SAMPLENAME)) +
+  geom_bar(stat = "count", width = 0.9) +
+  labs(y = "Total ASVs per sample", x = "") +
+  coord_flip() +
+    scale_y_continuous(position = "right") +
+  theme_linedraw() +
+  facet_grid(DATASET ~ ., scale = "free", space = "free") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black")),
+  asv_wtax %>% 
+    filter(Sample_or_Control == "Sample") %>%
+  group_by(SAMPLENAME, SITE, Domain, DATASET) %>% 
+  summarise(SUM_SEQ_DOMAIN = sum(value)) %>% 
+  ggplot(aes(x = SAMPLENAME, y = SUM_SEQ_DOMAIN, fill = Domain)) +
+  geom_bar(stat = "identity", color = "black", width = 0.9) +
+  labs(y = "Total sequences per sample", x = "") +
+  coord_flip() +
+  viridis::scale_fill_viridis(discrete = TRUE) +
+  scale_y_continuous(position = "right") +
+  theme_linedraw() +
+  facet_grid(DATASET ~ ., scale = "free", space = "free") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black"),
+        legend.position = "right"),
+  ncol = 2, align = c("hv"), axis = c("lr"))
+```
+
+### Table reporting total ASVs and sequences
+
+```{r Total ASVs raw, eval=FALSE}
+table_raw_stats <- asv_wtax %>% filter(value > 0) %>%
+       group_by(SAMPLENAME, DATASET, SITE) %>%
+       summarise(SEQ_SUM = sum(value),
+                 ASV_COUNT = n()) %>% 
+  ungroup() %>% 
+  gt(
+    groupname_col = c("DATASET", "SITE"),
+    rowname_col = "SAMPLENAME"
+  )
+table_raw_stats
+gtsave(table_raw_stats, filename = "seq_asv_count_nonQC.html", path = "output-tables/")
+```
+
+> After removing contaminate ASVs below, I will set threshold of 10,000
+> sequences- if a sample has fewer than this, chuck it.
+
+## Decontaminate sequence library
+
+Import sample description text file, import as phyloseq library, and
+remove potential contaminate ASVs and sequences. Catalog total number of
+ASVs and sequences removed from analysis.
+
+```{r Load libraries for decontam, eval=FALSE}
+# library(decontam); library(phyloseq)
+```
+
+### Import as phyloseq objects
+
+```{r Extract taxa and sample info as matrix for phyloseq input, eval=FALSE}
+tax_matrix <- merged_tax %>% 
+  select(FeatureID = `Feature ID`, Taxon) %>% 
+  separate(Taxon, c("Domain", "Supergroup", 
+                  "Phylum", "Class", "Order",
+                  "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>% 
+  column_to_rownames(var = "FeatureID") %>% 
+  as.matrix
+
+asv_matrix <- merged_asv %>% 
+  select(FeatureID = '#OTU ID', everything()) %>% 
+  column_to_rownames(var = "FeatureID") %>% 
+  as.matrix
+
+# Align row names for each matrix
+rownames(tax_matrix) <- row.names(asv_matrix)
+
+# Set rownames of metadata table to SAMPLE information
+row.names(metadata) <- metadata$SAMPLE
+```
+
+```{r Phyloseq import, eval=FALSE}
+# Import asv and tax matrices
+ASV = otu_table(asv_matrix, taxa_are_rows = TRUE)
+TAX = tax_table(tax_matrix)
+phylo_obj <- phyloseq(ASV, TAX)
+
+# Import metadata as sample data in phyloseq
+samplenames <- sample_data(metadata)
+
+# join as phyloseq object
+physeq_wnames = merge_phyloseq(phylo_obj, samplenames)
+# colnames(ASV)
+
+## Check
+# physeq_wnames
+```
+
+### Identify contaminant ASVs
+
+```{r Assign control samples, eval=FALSE}
+# When "Control" appears in "Sample_or_Control column, this is a negative control"
+sample_data(physeq_wnames)$is.neg <- sample_data(physeq_wnames)$Sample_or_Control == "Control"
+```
+
+```{r Identify contaminant ASVs, eval=FALSE}
+# ID contaminants using Prevalence information
+contam_prev <- isContaminant(physeq_wnames, 
+                               method="prevalence", 
+                               neg="is.neg", 
+                               threshold = 0.5, normalize = TRUE) 
+
+# Report number of ASVs IDed as contaminants
+table(contam_prev$contaminant)
+```
+
+> 0.5 - this threshold will ID contaminants in all samples that are more
+> prevalent in negative controls than in positive samples.
+
+*As of Dec 30 2021*: 56 ASVs deemed to be contaminant and will be
+removed.
+
+### Remove problematic ASVs
+
+```{r Assign contaminant ASVs, eval=FALSE}
+# Subset contaminant ASVs
+contams <- filter(contam_prev, contaminant == "TRUE")
+list_of_contam_asvs <- as.character(row.names(contams))
+# length(list_of_contam_asvs)
+
+taxa_contam <- as.data.frame(tax_matrix) %>% 
+  rownames_to_column(var = "FeatureID") %>% 
+  filter(FeatureID %in% list_of_contam_asvs)
+# head(taxa_contam)
+```
+
+```{r Compare decontaminated data with original, eval=FALSE}
+# View(asv_wtax)
+asv_wtax_decon <- asv_wtax %>% 
+  filter(!(FeatureID %in% list_of_contam_asvs)) %>% 
+  filter(!(Sample_or_Control == "Control"))
+
+tmp_orig <- (asv_wtax %>% filter(!(Sample_or_Control == "Control")))
+
+# Stats on lost
+x <- length(unique(tmp_orig$FeatureID)); x
+y <- length(unique(asv_wtax_decon$FeatureID)); y
+y-x
+100*((y-x)/x) # 56 total ASVs lost
+a <- sum(tmp_orig$value);a #3.817 million
+b <- sum(asv_wtax_decon$value);b #3.799 million 
+100*((b-a)/a)
+# Lost 0.47% of sequences from whole dataset.
+
+## Subsample to clean ASVs
+asv_wtax_wstats <- asv_wtax %>% 
+  mutate(DECONTAM = case_when(
+    FeatureID %in% list_of_contam_asvs ~ "FAIL",
+    TRUE ~ "PASS"
+  ))
+```
+
+>   Started with 17934 ASVs, post-decontamination, we have 17878 (a loss
+    of 56 ASVs).
+
+>   Data started with 3817219 sequences, after removing 56 ASVs, we have
+    3788791 total sequences. There was a total loss of 0.74% of
+    sequences.
+
+```{r, fig.height=18, fig.width=18, eval=FALSE}
+plot_grid(asv_wtax_wstats %>% 
+  filter(value > 0) %>% 
+  ggplot(aes(x = SAMPLE, fill = DECONTAM)) +
+  geom_bar(stat = "count", width = 0.9, color = "black") +
+  labs(y = "Total ASVs") +
+  coord_flip() +
+  theme_linedraw() +
+  facet_grid(DATASET ~ ., scale = "free", space = "free") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black"),
+        legend.position = "bottom"),
+  asv_wtax_wstats %>% 
+  group_by(SAMPLE, SITE, DECONTAM, DATASET) %>% 
+  summarise(SUM_SEQ_DOMAIN = sum(value)) %>% 
+  ggplot(aes(x = SAMPLE, y = SUM_SEQ_DOMAIN, fill = DECONTAM)) +
+  geom_bar(stat = "identity", color = "black", width = 0.9) +
+  labs(y = "Total Sequences") +
+  coord_flip() +
+  theme_linedraw() +
+  facet_grid(DATASET ~ ., scale = "free", space = "free") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black"),
+        legend.position = "bottom"),
+  ncol = 2)
+```
+
+This plot shows the distribution of ASVs and sequences that failed or
+passed the decontamination step. Most obvious are the control samples
+that indicated the potentially contaminate ASVs.
+
+# Survey of sequences from *in situ* samples
+
+```{r Isolate in situ only, eval=FALSE}
+# colnames(asv_wtax_wstats)
+# unique(asv_wtax_wstats$SAMPLE)
+sites <- c("Piccard", "VonDamm", "Axial", "GordaRidge")
+asv_insitu <- asv_wtax_wstats %>% filter(Sample_or_Control != "Control") %>% 
+       filter(SITE %in% sites) %>% 
+       filter(!grepl("_expTf_", SAMPLE)) %>% 
+       filter(value > 0) %>% 
+       filter(DECONTAM == "PASS")
+
+# Get quick stats on totals
+sum(asv_insitu$value) # 3.8 million sequences
+length(unique(asv_insitu$FeatureID)) #12,378 ASVs
+```
+> Final in situ dataset includes 3.79 million sequences and 12,378 ASVs total.
+
+Additional sample QC, check replicates, and determine if replicates
+should be averaged.
+
+```{r Investigate sequence and sample QC, fig.height=8, fig.width=15, eval=FALSE}
+plot_grid(asv_insitu %>% 
+  group_by(SAMPLENAME, VENT, DATASET, Domain) %>% 
+  summarise(seqsum_var = sum(value),
+            asvcount_var = n()) %>% 
+  pivot_longer(ends_with("_var"), names_to = "VARIABLE") %>% 
+  ggplot(aes(x = SAMPLENAME, y = value, fill = Domain)) +
+    geom_bar(color = "black", stat = "identity", position = "fill") +
+    facet_grid(VARIABLE ~ DATASET, space = "free", scales = "free") +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_linedraw() +
+  scale_fill_brewer(palette = "Paired") +
+  theme(strip.background = element_blank(), strip.text = element_text(color = "black"),
+        axis.text.x = element_text(color = "black", angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "bottom"),
+  asv_insitu %>% 
+  group_by(SAMPLENAME, VENT, DATASET, Domain) %>% 
+  summarise(seqsum_var = sum(value),
+            asvcount_var = n()) %>% 
+  pivot_longer(ends_with("_var"), names_to = "VARIABLE") %>% 
+  ggplot(aes(x = SAMPLENAME, y = value, fill = Domain)) +
+    geom_bar(color = "black", stat = "identity", position = "stack") +
+    facet_grid(VARIABLE ~ DATASET, space = "free_x", scales = "free") +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_linedraw() +
+  scale_fill_brewer(palette = "Paired") +
+  theme(strip.background = element_blank(), strip.text = element_text(color = "black"),
+        axis.text.x = element_text(color = "black", angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "bottom"),
+ncol = 2)
+```
+
+## Base bar plot - taxonomy
+
+```{r Review taxonomy and make bar plot, fig.width=15, fig.height=8, eval=FALSE}
+asv_insitu %>% 
+  filter(Domain == "Eukaryota") %>%
+  # unite(SampleIdentifier, VENT, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
+  mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
+         Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
+         Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
+         Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
+  group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
+           VENT, SITE, SAMPLETYPE, YEAR, DATASET) %>% 
+    summarise(SEQ_AVG_REP = mean(value)) %>% 
+  ungroup() %>% 
+  group_by(SITE, SAMPLETYPE, VENT, Supergroup) %>% 
+    summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
+  ggplot(aes(x = VENT, y = SEQ_SUM, fill = Supergroup)) +
+    geom_bar(stat = "identity", position = "stack", color = "black", width = 0.9) +
+    facet_grid(. ~ SITE + SAMPLETYPE, scale = "free", space = "free") +
+  theme_linedraw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black")) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
+    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
+    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
+    "#807dba", "#54278f", "#bdbdbd", "black"))
+```
+
+Repeat taxonomy barplot, but with relative abundance
+
+```{r Review taxonomy and make bar plot relative abundance, fig.width=15, fig.height=8, eval=FALSE}
+asv_insitu %>% 
+  filter(Domain == "Eukaryota") %>%
+  # unite(SampleIdentifier, VENT, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
+  mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
+         Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
+         Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
+         Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
+  group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
+           VENT, SITE, SAMPLETYPE, YEAR, DATASET) %>% 
+    summarise(SEQ_AVG_REP = mean(value)) %>% 
+  ungroup() %>% 
+  group_by(SITE, SAMPLETYPE, VENT, Supergroup) %>% 
+    summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
+  ggplot(aes(x = VENT, y = SEQ_SUM, fill = Supergroup)) +
+    geom_bar(stat = "identity", position = "fill", color = "black", width = 0.9) +
+    facet_grid(. ~ SITE + SAMPLETYPE, scale = "free", space = "free") +
+  theme_linedraw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        strip.background = element_blank(), strip.text = element_text(color = "black")) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
+    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
+    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
+    "#807dba", "#54278f", "#bdbdbd", "black"))
+```
+
+# Removal of samples - QC
+
+Filter samples so that the total number of sequences is greater than
+20,000 sequences.
+
+```{r, eval=FALSE}
+# head(asv_insitu)
+# unique(asv_insitu$Sample_or_Control)
+# hist(asv_insitu$value)
+tmp <- (asv_insitu %>% 
+          group_by(SAMPLE, SAMPLENAME) %>% 
+          summarise(SUM = sum(value)) %>% 
+        filter(SUM < 20000))
+toofew <- as.character(unique(tmp$SAMPLE))
+toofew
+```
+
+Samples: Axial_Dependable_FS900_2013 and
+GordaRidge_BSW020_sterivex_2019_REPa removed due to too few sequences.
+
+## Sequence and ASV table summary
+
+Final table reporting total sequences and ASVs for each sample.
+
+```{r Remake table remove samples with too few sequences, eval=FALSE}
+asv_insitu_qc <- asv_insitu %>% 
+  filter(!(SAMPLE %in% toofew)) %>% 
+  filter(value > 0)
+
+stats_seq_asv_postQC <- asv_insitu_qc %>% 
+  group_by(SAMPLEID, VENT, DATASET, SITE, SAMPLETYPE, YEAR) %>%
+    summarise(SEQ_SUM = sum(value),
+     ASV_COUNT = n()) %>% 
+  ungroup() %>% 
+  gt(
+    groupname_col = c("DATASET", "SITE", "YEAR"),
+    rowname_col = "SAMPLEID"
+  ) %>%
+  tab_header(title = "Final sequence & ASV count")
+
+stats_seq_asv_postQC
+# sum(asv_insitu_qc$value)
+# length(unique(asv_insitu_qc$FeatureID))
+gtsave(stats_seq_asv_postQC, filename = "../output-tables/seq_asv_count_postQC.html")
+
+# tmp <- asv_insitu_qc %>% 
+#   group_by(SAMPLEID, VENT, DATASET, SITE, SAMPLETYPE, YEAR) %>%
+#     summarise(SEQ_SUM = sum(value),
+#      ASV_COUNT = n())
+# mean(tmp$SEQ_SUM); range(tmp$SEQ_SUM)
+# mean(tmp$ASV_COUNT); range(tmp$ASV_COUNT)
+# View(filter(tmp))
+```
+
+# Assess ASV presence/absence
+
+Set up analysis to classify each ASV based on distribution
+
+```{r Classification of ASVs by dataset and sample type, eval=FALSE}
+# head(asv_insitu_qc)
+# head(insitu_wide)
+# unique(asv_insitu_qc$SAMPLETYPE)
+# unique(asv_insitu_qc$SITE)
+
+tax_asv_id <- asv_insitu_qc %>% 
+  filter(value > 0) %>% #remove zero values
+  select(FeatureID, SITE, SAMPLETYPE) %>% # isolate only ASVs that are PRESENT at a site and sampletype
+  distinct() %>% #unique this, as presense = present in at least 1 rep (where applicable)
+  unite(sample_id, SITE, SAMPLETYPE, sep = "_") %>% 
+  # select(-SITE) %>% 
+  # distinct() %>% 
+  add_column(present = 1) %>%
+  pivot_wider(names_from = sample_id, values_from = present, values_fill = 0) %>% 
+  rowwise() %>% 
+  mutate_at(vars(FeatureID), factor)
+```
+
+Is an ASV present only at the vent site? plume? or background? What
+about background and plume only?
+
+```{r Assess presence of samples, eval=FALSE}
+library(purrr)
+any_cols <- function(tax_asv_id) reduce(tax_asv_id, `|`)
+
+asv_class <- tax_asv_id %>%
+  mutate(vent = ifelse(any_cols(across(contains("_Vent"), ~ . > 0)), "VENT", ""),
+         plume= ifelse(any_cols(across(contains("_Plume"), ~ . > 0)), "PLUME", ""),
+         bsw = ifelse(any_cols(across(contains("_Background"), ~ . > 0)), "BSW", ""),
+         ) %>% 
+  unite(class_tmp, vent, plume, bsw, sep = "_", na.rm = TRUE) %>% 
+  mutate(CLASS = case_when(
+  class_tmp == "VENT__" ~ "Vent only",
+  class_tmp == "_PLUME_" ~ "Plume only",
+  class_tmp == "__BSW" ~ "Background only",
+  class_tmp == "VENT__BSW" ~ "Vent & background",
+  class_tmp == "VENT_PLUME_BSW" ~ "Vent, plume, & background",
+  class_tmp == "VENT_PLUME_" ~ "Vent & plume",
+  class_tmp == "_PLUME_BSW" ~ "Plume & background"
+  )) %>% 
+  select(FeatureID, CLASS) %>% distinct()
+
+colnames(tax_asv_id)
+```
+
+Binary data frame with 1 indicating presence of ASV (rows) in a given
+sample (columns)
+
+Depending on prevalence of ASV, assign groupings of location.
+
+```{r Assign ASV prevalence, eval=FALSE}
+asv_class_SITE <- tax_asv_id %>%
+  mutate(
+    # mcr = ifelse(any_cols(across(contains("Piccard") | contains("VonDamm"), ~ . > 0)), "MCR", ""),
+        picc = ifelse(any_cols(across(contains("Piccard"), ~ . > 0)), "Picc", ""),
+        vd = ifelse(any_cols(across(contains("VonDamm"), ~ . > 0)), "VD", ""),
+         axial = ifelse(any_cols(across(contains("Axial"), ~ . > 0)), "AxS", ""),
+         gr = ifelse(any_cols(across(contains("Gorda"), ~ . > 0)), "GR", "")
+         ) %>% 
+  # unite(class_tmp, mcr, axial, gr, sep = "_", na.rm = TRUE) %>%
+  unite(class_tmp, picc, vd, axial, gr, sep = "_", na.rm = TRUE) %>% 
+  # unique(asv_class_SITE$class_tmp)
+  mutate(SITE_CLASS = case_when(
+  class_tmp == "___GR" ~ "Gorda Ridge only",
+  class_tmp == "__AxS_" ~ "Axial only",
+  class_tmp == "_VD__" ~ "Von Damm only",
+  class_tmp == "Picc_VD__" ~ "Piccard & Von Damm",
+  class_tmp == "Picc___" ~ "Piccard only",
+  class_tmp == "Picc_VD_AxS_" ~ "MCR & Axial",
+  class_tmp == "__AxS_GR" ~ "Axial & Gorda Ridge",
+  class_tmp == "_VD__GR" ~ "Von Damm & Gorda Ridge",
+  class_tmp == "_VD_AxS_GR" ~ "Von Damm, Axial, & Gorda Ridge",
+  class_tmp == "_VD_AxS_" ~ "Von Damm & Axial",
+  # class_tmp == "MCR__" ~ "Mid-Cayman Rise",
+  class_tmp == "Picc_VD__GR" ~ "MCR & Gorda Ridge",
+  class_tmp == "Picc__AxS_GR" ~ "Piccard, Axial, & Gorda Ridge",
+  class_tmp == "Picc___GR" ~ "Piccard & Gorda Ridge",
+  class_tmp == "Picc__AxS_" ~ "Piccard & Axial",
+  class_tmp == "Picc_VD_AxS_GR" ~ "All sites"
+  )) %>% 
+  select(FeatureID, SITE_CLASS) %>% distinct()
+# View(select(asv_class_SITE, SITE_CLASS) %>% distinct())
+```
+
+Combine together with original ASV table
+
+```{r Combine ASV classifications, eval=FALSE}
+insitu_asv_wClass <- asv_insitu_qc %>% 
+  left_join(asv_class) %>% 
+  left_join(asv_class_SITE)
+# head(insitu_asv_wClass)
+```
+
+Visualize the total number of ASVs in background, plume, versus
+background.
+
+```{r, fig.height=4, fig.width=8, tidy=FALSE, eval=FALSE}
+# head(asv_insitu_qc)
+# svg("bubbles.svg", h = 4, w = 8)
+asv_insitu_qc %>% 
+  select(DATASET, FeatureID, SAMPLETYPE) %>% 
+  group_by(DATASET, SAMPLETYPE) %>% 
+    summarise(COUNT = n_distinct(FeatureID)) %>% 
+  ggplot(aes(x = DATASET, y = SAMPLETYPE, fill = SAMPLETYPE)) +
+    geom_point(aes(size = COUNT), shape = 21, color = "black") +
+    scale_size_continuous(range = c(4,20)) +
+  scale_fill_viridis_d(option = "B") +
+  theme_void() +
+  theme(legend.position = "right",
+        axis.text = element_text(color = "black"))
+# dev.off()
+```
+
+Bubble plot reporting the total number of ASVs found in the vent, plume,
+versus background. At each site, the vent protist population had a
+higher total number of ASVs.
+
+Repeat visualization by ASV distribution category.
+
+```{r, fig.height=8, fig.width=9, eval=FALSE}
+# head(insitu_asv_wClass)
+insitu_asv_wClass %>% 
+  select(DATASET, FeatureID, SAMPLETYPE, CLASS) %>% 
+  group_by(DATASET, SAMPLETYPE, CLASS) %>% 
+    summarise(COUNT = n_distinct(FeatureID)) %>% 
+  ggplot(aes(x = DATASET, y = SAMPLETYPE, fill = SAMPLETYPE)) +
+    geom_point(aes(size = COUNT), shape = 21, color = "black") +
+    scale_size_continuous(range = c(4,20)) +
+  scale_fill_viridis_d(option = "B") +
+  theme_void() +
+  theme(legend.position = "right",
+        axis.text.x = element_text(color = "black"),
+        axis.title.y = element_blank()) +
+  facet_grid(SAMPLETYPE + CLASS ~ ., scales = "free", space = "free") +
+  labs(x = "", y = "", title = "Total number of ASVs by distribution & sample type")
+```
+
+Repeated bubble plot reports the total number of ASVs in the vent,
+plume, and background - but now further separated by distribution (i.e.,
+if an ASV was found only in the vent and plume = "Vent & plume"). The
+largest portion of ASVs were found only at the vent sites (Vent only).
+
+Categories for ASV distribution:
+
+```{r Review classification text, eval=FALSE}
+unique(insitu_asv_wClass$CLASS)
+unique(insitu_asv_wClass$SITE_CLASS)
+length(unique(insitu_asv_wClass$FeatureID))
+sum(insitu_asv_wClass$value)
+```
+
+# Save working ASV table
+
+Checkpoint to save working dataframes.
+
+```{r, eval=FALSE}
+save(asv_insitu, asv_insitu_qc, insitu_asv_wClass, file = "../data-input/asv-tables-processed-18102021.RData")
+```
