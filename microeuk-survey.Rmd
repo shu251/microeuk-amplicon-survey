@@ -11,7 +11,6 @@ output:
     toc: true
     toc_depth: 3
     toc_float: true
-    code_folding: hide
   pdf_document:
     toc: true
     toc_depth: '3'
@@ -28,6 +27,9 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, tidy = FALSE, message = FALSE)
 ```
+
+All upstream processing of sequences from QIIME2 can be found [here](https://github.com/shu251/microeuk-amplicon-survey/tree/main/seq-analysis).
+
 
 ```{r Library loading initial, echo=FALSE, message=FALSE}
 library(tidyverse); library(cowplot)
@@ -64,765 +66,6 @@ environment (to explore their relationship to geochemical properties).
 > influence microbial eukaryotic community diversity? Can we identify if
 > certain environmental factors select for putative vent endemics?
 
-# Environmental characterization of all vent sites
-
-Three sites in separate ocean regions.
-
-```{r Import metadata for environmental measurements}
-metadata <- read.delim("data-input/samplelist-metadata.txt", na.strings = "")
-# View(metadata)
-# ?read.delim()
-# colnames(metadata)
-```
-
-Filter to environmental data only.
-
-```{r}
-env_deepsea <- metadata %>% 
-  mutate_all(as.character) %>%
-  filter(Sample_or_Control == "Sample") %>% 
-  filter(!(SAMPLETYPE == "Incubation")) %>% 
-  filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
-  select(VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater, Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc) %>%  
-  pivot_longer(cols = TEMP:ProkConc, names_to = "VARIABLE", values_to = "VALUE", values_drop_na = FALSE) %>% 
-  distinct() %>% 
-  group_by(VENT, COORDINATES, SITE, DEPTH, SAMPLETYPE, YEAR, VARIABLE) 
-
-# head(env_deepsea)
-# unique(env_deepsea$VARIABLE)
-# str(env_deepsea)
-```
-
-Units for the variables are as follows:
-- Temp = Celsius
-- Percent Seawater = %
-- Mg = mmol/kg (or mM)
-- H2 = µmol/L (or µM)
-- H2S = mmol/L (or mM)
-- CH4 = µmol/kg (or mM)
-- ProkConc = cells/ml
-
-_last updated Dec 29, 2021_ 
-* Needs updated H2 numbers for MCR from Jeff
-* All of this chemistry needs to be double checked again... 
-
-
-## Visualize geochemistry
-
-```{r, fig.height=9, fig.width=10}
-rm <- c("-", "", "nd", "bd", NA)
-
-geochem_1 <- env_deepsea %>% 
-  filter(VARIABLE != "ProkConc") %>% 
-  filter(!(VALUE %in% rm)) %>% 
-  mutate(VALUE = as.numeric(as.character(VALUE))) %>% 
-  ggplot(aes(x = SAMPLETYPE, y = VALUE, fill = SITE, shape = SAMPLETYPE))+
-  geom_jitter(size = 3) +
-  facet_wrap(VARIABLE ~ ., scales = "free") +
-  scale_shape_manual(values = c(21, 23, 24)) +
-  scale_fill_manual(values = c("#fdbb84", "#31a354", "#ef3b2c", "#02818a")) +
-  guides(fill = guide_legend(override.aes = list(shape = 21) ),
-              shape = guide_legend(override.aes = list(fill = "black"))) +
-  theme_bw() +
-    theme(axis.text = element_text(color="black", size=12),
-          legend.title = element_blank(),
-          axis.title = element_text(color="black", size=14),
-          legend.text = element_text(color = "black", size = 14),
-          plot.margin = margin(2, 1, 2, 1, "cm"),
-          strip.background = element_blank()) +
-  labs(x = "", y = "")
-geochem_1
-
-
-geochem_violin <- env_deepsea %>% 
-  filter(VARIABLE != "ProkConc") %>% 
-  filter(!(VALUE %in% rm)) %>% 
-  mutate(VALUE = as.numeric(as.character(VALUE))) %>% 
-  ggplot(aes(x = SAMPLETYPE, y = VALUE, fill = SITE, shape = SAMPLETYPE)) +
-  geom_boxplot(alpha = 0.3, aes(group = SAMPLETYPE), fill = "grey", width = 0.3) +
-  geom_jitter(size = 2, width = 0.2) +
-  facet_wrap(VARIABLE ~ ., scales = "free") +
-  scale_shape_manual(values = c(21, 23, 24)) +
-  scale_fill_manual(values = c("#fdbb84", "#31a354", "#ef3b2c", "#02818a")) +
-  guides(fill = guide_legend(override.aes = list(shape = 21) ),
-              shape = guide_legend(override.aes = list(fill = "black"))) +
-  theme_bw() +
-    theme(axis.text = element_text(color="black", size=12),
-          legend.title = element_blank(),
-          axis.title = element_text(color="black", size=14),
-          legend.text = element_text(color = "black", size = 14),
-          plot.margin = margin(2, 1, 2, 1, "cm"),
-          strip.background = element_blank()) +
-  labs(x = "", y = "")
-geochem_violin
-```
-
-```{r, fig.height=4, fig.width=5}
-geochem_2 <- env_deepsea %>% 
-  filter(VARIABLE == "ProkConc") %>% 
-  filter(!(VALUE %in% rm)) %>% 
-  mutate(VALUE = as.numeric(as.character(VALUE))) %>% 
-  ggplot(aes(x = SAMPLETYPE, y = VALUE, fill = SITE, shape = SAMPLETYPE)) +
-  geom_boxplot(alpha = 0.3, aes(group = SAMPLETYPE), fill = "grey", width = 0.3) +
-  geom_jitter(size = 2, width = 0.2) +
-  facet_wrap(VARIABLE ~ ., scales = "free") +
-  scale_y_log10() +
-  scale_shape_manual(values = c(21, 23, 24)) +
-  scale_fill_manual(values = c("#fdbb84", "#31a354", "#ef3b2c", "#02818a")) +
-  guides(fill = guide_legend(override.aes = list(shape = 21) ),
-              shape = guide_legend(override.aes = list(fill = "black"))) +
-  theme_bw() +
-    theme(axis.text = element_text(color="black", size=12),
-          legend.title = element_blank(),
-          axis.title = element_text(color="black", size=14),
-          legend.text = element_text(color = "black", size = 14),
-          plot.margin = margin(2, 1, 2, 1, "cm"),
-          strip.background = element_blank()) +
-  labs(x = "", y = "")
-geochem_2
-```
-
-### Set colors and symbols for dataset
-```{r}
-sampletype_order <- c("Background", "Plume", "Vent")
-sampletype_symbol<- c(21, 23, 24)
-
-site_order <- c("Axial", "GordaRidge", "Piccard", "VonDamm")
-site_color <- c("#fdbb84", "#31a354", "#ef3b2c", "#02818a")
-```
-
-
-## **Table S1** Geochemistry values
-
-Generate output table for all parameters measured
-
-```{r}
-# colnames(metadata)
-geomchem_table <- metadata %>% 
-  mutate_all(as.character) %>%
-  filter(Sample_or_Control == "Sample") %>% 
-  filter(!(SAMPLETYPE == "Incubation")) %>% 
-  filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
-  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater, Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc)
-geomchem_table
-# write_delim(geomchem_table, file = "table-geochem-params.txt", delim = "\t")
-```
-
-# Import exisiting sequence data
-
-Datasets included: - Gorda Ridge 2019 cruise - Axial Seamount time
-series - 2013, 2014, & 2015 - Mid-Cayman Rise 2020 cruise
-
-All data generated from extracted RNA, reverse transcribed to cDNA and
-amplified with primers that target the V4 hypervariable region on the
-18S rRNA gene.
-
-Analysis done with QIIME2, kept 40-60% of the sequences through the QC
-process and generated Amplicon Sequence Variants (ASVs) with DADA2.
-Taxonomic assignment done with vsearch using the PR2 database (v4.14) at
-80% identity. See the `seq-analysis` directory for QIIME2 code.
-
-## Merged data from QIIME2 analysis
-
-After determining ASVs for each sequence run, ASV tables were merged.
-
-```{r Import taxonomy and ASV table, message=FALSE, eval=FALSE}
-merged_tax <- read_delim("data-input/taxonomy.tsv", delim = "\t")
-merged_asv <- read_delim("data-input/microeuk-merged-asv-table.tsv", delim = "\t", skip = 1)
-# head(merged_tax)
-```
-
-### Import metadata & reformat
-
-Still want to find more metadata. As of Dec 30, got as much geochem data available, but can add in more metadata for the MCR cruise. Need to confirm values from Jeff 
-
-
-```{r}
-metadata_formatted <- metadata %>% 
-  mutate_all(as.character) %>%
-  filter(Sample_or_Control == "Sample") %>% 
-  filter(!(SAMPLETYPE == "Incubation")) %>% 
-  filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
-  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater, Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc, Sample_or_Control)
-```
-
-Remove samples from Gorda Ridge microcolonizers and from the FLP
-experiments (Gorda Ridge and Mid-Cayman Rise).
-
-```{r Join taxonomy and ASV data, eval=FALSE}
-asv_wtax <- merged_asv %>%
-  select(FeatureID = '#OTU ID', everything()) %>%
-  pivot_longer(cols = !FeatureID,
-               names_to = "SAMPLE", values_to = "value") %>%
-  left_join(merged_tax, by = c("FeatureID" = "Feature ID")) %>%
-  left_join(metadata_formatted) %>%
-  filter(!grepl("Siders_", SAMPLE)) %>% 
-  filter(SAMPLETYPE != "Incubation") %>% 
-  filter(SAMPLETYPE != "Microcolonizer") %>%
-  mutate(DATASET = case_when(
-    grepl("_GR_", SAMPLE) ~ "GR",
-    grepl("Gorda", SAMPLE) ~ "GR",
-    grepl("_MCR_", SAMPLE) ~ "MCR",
-    grepl("Axial", SAMPLE) ~ "Axial",
-  TRUE ~ "Control or blank")) %>%
-    separate(Taxon, c("Domain", "Supergroup",
-                  "Phylum", "Class", "Order",
-                  "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>% 
-  unite(SAMPLENAME, SITE, SAMPLETYPE, YEAR, VENT, SAMPLEID, sep = " ", remove = FALSE)
-
-# View(asv_wtax)
-# head(asv_wtax) ## Complete ASV table with full taxonomy names and annotated sample information
-```
-
-### Total number of sequences
-
-Barplots to show total number of sequences and total number of ASVs.
-
-Total number of sequences and ASVs parallel each other. The Axial and
-Gorda Ridge data were run on the same sequence run, with Mid-Cayman Rise
-run on a separate MiSeq run - so the average number of sequences (and
-ASVs) varies between these two runs. A few samples have too few
-sequences, they will be removed below.
-
-This newest version of PR2 has bacteria and archaea in it. Very, very
-few were assigned to this. Majority assigned to eukaryotes.
-
-```{r Plot total ASV and sequences, eval=FALSE, fig.height=11, fig.width=14}
-# head(asv_wtax)
-library(viridis)
-plot_grid(
-  # Total number of ASVs
-  asv_wtax %>% 
-  filter(value > 0) %>% 
-  filter(Sample_or_Control == "Sample") %>% 
-  ggplot(aes(x = SAMPLENAME)) +
-  geom_bar(stat = "count", width = 0.9) +
-  labs(y = "Total ASVs per sample", x = "") +
-  coord_flip() +
-    scale_y_continuous(position = "right") +
-  theme_linedraw() +
-  facet_grid(DATASET ~ ., scale = "free", space = "free") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 1),
-        axis.text.y = element_text(angle = 0, hjust = 1, vjust = 1),
-        strip.background = element_blank(), strip.text = element_text(color = "black")),
-  asv_wtax %>% 
-    filter(Sample_or_Control == "Sample") %>%
-  group_by(SAMPLENAME, SITE, Domain, DATASET) %>% 
-  summarise(SUM_SEQ_DOMAIN = sum(value)) %>% 
-  ggplot(aes(x = SAMPLENAME, y = SUM_SEQ_DOMAIN, fill = Domain)) +
-  geom_bar(stat = "identity", color = "black", width = 0.9) +
-  labs(y = "Total sequences per sample", x = "") +
-  coord_flip() +
-  viridis::scale_fill_viridis(discrete = TRUE) +
-  scale_y_continuous(position = "right") +
-  theme_linedraw() +
-  facet_grid(DATASET ~ ., scale = "free", space = "free") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 1),
-        axis.text.y = element_text(angle = 0, hjust = 1, vjust = 1),
-        strip.background = element_blank(), strip.text = element_text(color = "black"),
-        legend.position = "right"),
-  ncol = 2, align = c("hv"), axis = c("lr"))
-```
-
-### Table reporting total ASVs and sequences
-
-```{r Total ASVs raw, eval=FALSE}
-table_raw_stats <- asv_wtax %>% filter(value > 0) %>%
-       group_by(SAMPLENAME, DATASET, SITE) %>%
-       summarise(SEQ_SUM = sum(value),
-                 ASV_COUNT = n()) %>% 
-  ungroup() %>% 
-  gt(
-    groupname_col = c("DATASET", "SITE"),
-    rowname_col = "SAMPLENAME"
-  )
-table_raw_stats
-gtsave(table_raw_stats, filename = "seq_asv_count_nonQC.html", path = "output-tables/")
-```
-
-> After removing contaminate ASVs below, I will set threshold of 10,000
-> sequences- if a sample has fewer than this, chuck it.
-
-## Decontaminate sequence library
-
-Import sample description text file, import as phyloseq library, and
-remove potential contaminate ASVs and sequences. Catalog total number of
-ASVs and sequences removed from analysis.
-
-```{r Load libraries for decontam, eval=FALSE}
-# library(decontam); library(phyloseq)
-```
-
-### Import as phyloseq objects
-
-```{r Extract taxa and sample info as matrix for phyloseq input, eval=FALSE}
-tax_matrix <- merged_tax %>% 
-  select(FeatureID = `Feature ID`, Taxon) %>% 
-  separate(Taxon, c("Domain", "Supergroup", 
-                  "Phylum", "Class", "Order",
-                  "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>% 
-  column_to_rownames(var = "FeatureID") %>% 
-  as.matrix
-
-asv_matrix <- merged_asv %>% 
-  select(FeatureID = '#OTU ID', everything()) %>% 
-  column_to_rownames(var = "FeatureID") %>% 
-  as.matrix
-
-# Align row names for each matrix
-rownames(tax_matrix) <- row.names(asv_matrix)
-
-# Set rownames of metadata table to SAMPLE information
-row.names(metadata) <- metadata$SAMPLE
-```
-
-```{r Phyloseq import, eval=FALSE}
-# Import asv and tax matrices
-ASV = otu_table(asv_matrix, taxa_are_rows = TRUE)
-TAX = tax_table(tax_matrix)
-phylo_obj <- phyloseq(ASV, TAX)
-
-# Import metadata as sample data in phyloseq
-samplenames <- sample_data(metadata)
-
-# join as phyloseq object
-physeq_wnames = merge_phyloseq(phylo_obj, samplenames)
-# colnames(ASV)
-
-## Check
-# physeq_wnames
-```
-
-### Identify contaminant ASVs
-
-```{r Assign control samples, eval=FALSE}
-# When "Control" appears in "Sample_or_Control column, this is a negative control"
-sample_data(physeq_wnames)$is.neg <- sample_data(physeq_wnames)$Sample_or_Control == "Control"
-```
-
-```{r Identify contaminant ASVs, eval=FALSE}
-# ID contaminants using Prevalence information
-contam_prev <- isContaminant(physeq_wnames, 
-                               method="prevalence", 
-                               neg="is.neg", 
-                               threshold = 0.5, normalize = TRUE) 
-
-# Report number of ASVs IDed as contaminants
-table(contam_prev$contaminant)
-```
-
-> 0.5 - this threshold will ID contaminants in all samples that are more
-> prevalent in negative controls than in positive samples.
-
-*As of Dec 30 2021*: 56 ASVs deemed to be contaminant and will be
-removed.
-
-### Remove problematic ASVs
-
-```{r Assign contaminant ASVs, eval=FALSE}
-# Subset contaminant ASVs
-contams <- filter(contam_prev, contaminant == "TRUE")
-list_of_contam_asvs <- as.character(row.names(contams))
-# length(list_of_contam_asvs)
-
-taxa_contam <- as.data.frame(tax_matrix) %>% 
-  rownames_to_column(var = "FeatureID") %>% 
-  filter(FeatureID %in% list_of_contam_asvs)
-# head(taxa_contam)
-```
-
-```{r Compare decontaminated data with original, eval=FALSE}
-# View(asv_wtax)
-asv_wtax_decon <- asv_wtax %>% 
-  filter(!(FeatureID %in% list_of_contam_asvs)) %>% 
-  filter(!(Sample_or_Control == "Control"))
-
-tmp_orig <- (asv_wtax %>% filter(!(Sample_or_Control == "Control")))
-
-# Stats on lost
-x <- length(unique(tmp_orig$FeatureID)); x
-y <- length(unique(asv_wtax_decon$FeatureID)); y
-y-x
-100*((y-x)/x) # 56 total ASVs lost
-a <- sum(tmp_orig$value);a #3.817 million
-b <- sum(asv_wtax_decon$value);b #3.799 million 
-100*((b-a)/a)
-# Lost 0.47% of sequences from whole dataset.
-
-## Subsample to clean ASVs
-asv_wtax_wstats <- asv_wtax %>% 
-  mutate(DECONTAM = case_when(
-    FeatureID %in% list_of_contam_asvs ~ "FAIL",
-    TRUE ~ "PASS"
-  ))
-```
-
->   Started with 17934 ASVs, post-decontamination, we have 17878 (a loss
-    of 56 ASVs).
-
->   Data started with 3817219 sequences, after removing 56 ASVs, we have
-    3788791 total sequences. There was a total loss of 0.74% of
-    sequences.
-
-```{r, fig.height=18, fig.width=18, eval=FALSE}
-plot_grid(asv_wtax_wstats %>% 
-  filter(value > 0) %>% 
-  ggplot(aes(x = SAMPLE, fill = DECONTAM)) +
-  geom_bar(stat = "count", width = 0.9, color = "black") +
-  labs(y = "Total ASVs") +
-  coord_flip() +
-  theme_linedraw() +
-  facet_grid(DATASET ~ ., scale = "free", space = "free") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
-        strip.background = element_blank(), strip.text = element_text(color = "black"),
-        legend.position = "bottom"),
-  asv_wtax_wstats %>% 
-  group_by(SAMPLE, SITE, DECONTAM, DATASET) %>% 
-  summarise(SUM_SEQ_DOMAIN = sum(value)) %>% 
-  ggplot(aes(x = SAMPLE, y = SUM_SEQ_DOMAIN, fill = DECONTAM)) +
-  geom_bar(stat = "identity", color = "black", width = 0.9) +
-  labs(y = "Total Sequences") +
-  coord_flip() +
-  theme_linedraw() +
-  facet_grid(DATASET ~ ., scale = "free", space = "free") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
-        strip.background = element_blank(), strip.text = element_text(color = "black"),
-        legend.position = "bottom"),
-  ncol = 2)
-```
-
-This plot shows the distribution of ASVs and sequences that failed or
-passed the decontamination step. Most obvious are the control samples
-that indicated the potentially contaminate ASVs.
-
-# Survey of sequences from *in situ* samples
-
-```{r Isolate in situ only, eval=FALSE}
-# colnames(asv_wtax_wstats)
-# unique(asv_wtax_wstats$SAMPLE)
-sites <- c("Piccard", "VonDamm", "Axial", "GordaRidge")
-asv_insitu <- asv_wtax_wstats %>% filter(Sample_or_Control != "Control") %>% 
-       filter(SITE %in% sites) %>% 
-       filter(!grepl("_expTf_", SAMPLE)) %>% 
-       filter(value > 0) %>% 
-       filter(DECONTAM == "PASS")
-
-# Get quick stats on totals
-sum(asv_insitu$value) # 3.8 million sequences
-length(unique(asv_insitu$FeatureID)) #12,378 ASVs
-```
-> Final in situ dataset includes 3.79 million sequences and 12,378 ASVs total.
-
-Additional sample QC, check replicates, and determine if replicates
-should be averaged.
-
-```{r Investigate sequence and sample QC, fig.height=8, fig.width=15, eval=FALSE}
-plot_grid(asv_insitu %>% 
-  group_by(SAMPLENAME, VENT, DATASET, Domain) %>% 
-  summarise(seqsum_var = sum(value),
-            asvcount_var = n()) %>% 
-  pivot_longer(ends_with("_var"), names_to = "VARIABLE") %>% 
-  ggplot(aes(x = SAMPLENAME, y = value, fill = Domain)) +
-    geom_bar(color = "black", stat = "identity", position = "fill") +
-    facet_grid(VARIABLE ~ DATASET, space = "free", scales = "free") +
-  scale_y_continuous(expand = c(0,0)) +
-  theme_linedraw() +
-  scale_fill_brewer(palette = "Paired") +
-  theme(strip.background = element_blank(), strip.text = element_text(color = "black"),
-        axis.text.x = element_text(color = "black", angle = 90, hjust = 1, vjust = 0.5),
-        legend.position = "bottom"),
-  asv_insitu %>% 
-  group_by(SAMPLENAME, VENT, DATASET, Domain) %>% 
-  summarise(seqsum_var = sum(value),
-            asvcount_var = n()) %>% 
-  pivot_longer(ends_with("_var"), names_to = "VARIABLE") %>% 
-  ggplot(aes(x = SAMPLENAME, y = value, fill = Domain)) +
-    geom_bar(color = "black", stat = "identity", position = "stack") +
-    facet_grid(VARIABLE ~ DATASET, space = "free_x", scales = "free") +
-  scale_y_continuous(expand = c(0,0)) +
-  theme_linedraw() +
-  scale_fill_brewer(palette = "Paired") +
-  theme(strip.background = element_blank(), strip.text = element_text(color = "black"),
-        axis.text.x = element_text(color = "black", angle = 90, hjust = 1, vjust = 0.5),
-        legend.position = "bottom"),
-ncol = 2)
-```
-
-## Base bar plot - taxonomy
-
-```{r Review taxonomy and make bar plot, fig.width=15, fig.height=8, eval=FALSE}
-asv_insitu %>% 
-  filter(Domain == "Eukaryota") %>%
-  # unite(SampleIdentifier, VENT, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
-  mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
-         Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
-         Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
-         Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
-  group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
-           VENT, SITE, SAMPLETYPE, YEAR, DATASET) %>% 
-    summarise(SEQ_AVG_REP = mean(value)) %>% 
-  ungroup() %>% 
-  group_by(SITE, SAMPLETYPE, VENT, Supergroup) %>% 
-    summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
-  ggplot(aes(x = VENT, y = SEQ_SUM, fill = Supergroup)) +
-    geom_bar(stat = "identity", position = "stack", color = "black", width = 0.9) +
-    facet_grid(. ~ SITE + SAMPLETYPE, scale = "free", space = "free") +
-  theme_linedraw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
-        strip.background = element_blank(), strip.text = element_text(color = "black")) +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
-    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
-    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
-    "#807dba", "#54278f", "#bdbdbd", "black"))
-```
-
-Repeat taxonomy barplot, but with relative abundance
-
-```{r Review taxonomy and make bar plot relative abundance, fig.width=15, fig.height=8, eval=FALSE}
-asv_insitu %>% 
-  filter(Domain == "Eukaryota") %>%
-  # unite(SampleIdentifier, VENT, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
-  mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
-         Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
-         Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
-         Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
-  group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
-           VENT, SITE, SAMPLETYPE, YEAR, DATASET) %>% 
-    summarise(SEQ_AVG_REP = mean(value)) %>% 
-  ungroup() %>% 
-  group_by(SITE, SAMPLETYPE, VENT, Supergroup) %>% 
-    summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
-  ggplot(aes(x = VENT, y = SEQ_SUM, fill = Supergroup)) +
-    geom_bar(stat = "identity", position = "fill", color = "black", width = 0.9) +
-    facet_grid(. ~ SITE + SAMPLETYPE, scale = "free", space = "free") +
-  theme_linedraw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
-        strip.background = element_blank(), strip.text = element_text(color = "black")) +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_fill_manual(values = c("#f1eef6", "#d7b5d8", "#df65b0", "#ce1256", "#fc9272", "#ef3b2c", 
-    "#800026", "#fff7bc", "#fec44f", "#d95f0e", "#a63603", "#74c476", "#238b45", 
-    "#00441b", "#7fcdbb", "#084081", "#c6dbef", "#2b8cbe", "#016c59", "#bcbddc", 
-    "#807dba", "#54278f", "#bdbdbd", "black"))
-```
-
-# Removal of samples - QC
-
-Filter samples so that the total number of sequences is greater than
-20,000 sequences.
-
-```{r, eval=FALSE}
-# head(asv_insitu)
-# unique(asv_insitu$Sample_or_Control)
-# hist(asv_insitu$value)
-tmp <- (asv_insitu %>% 
-          group_by(SAMPLE, SAMPLENAME) %>% 
-          summarise(SUM = sum(value)) %>% 
-        filter(SUM < 20000))
-toofew <- as.character(unique(tmp$SAMPLE))
-toofew
-```
-
-Samples: Axial_Dependable_FS900_2013 and
-GordaRidge_BSW020_sterivex_2019_REPa removed due to too few sequences.
-
-## Sequence and ASV table summary
-
-Final table reporting total sequences and ASVs for each sample.
-
-```{r Remake table remove samples with too few sequences, eval=FALSE}
-asv_insitu_qc <- asv_insitu %>% 
-  filter(!(SAMPLE %in% toofew)) %>% 
-  filter(value > 0)
-
-stats_seq_asv_postQC <- asv_insitu_qc %>% 
-  group_by(SAMPLEID, VENT, DATASET, SITE, SAMPLETYPE, YEAR) %>%
-    summarise(SEQ_SUM = sum(value),
-     ASV_COUNT = n()) %>% 
-  ungroup() %>% 
-  gt(
-    groupname_col = c("DATASET", "SITE", "YEAR"),
-    rowname_col = "SAMPLEID"
-  ) %>%
-  tab_header(title = "Final sequence & ASV count")
-
-stats_seq_asv_postQC
-# sum(asv_insitu_qc$value)
-# length(unique(asv_insitu_qc$FeatureID))
-gtsave(stats_seq_asv_postQC, filename = "output-tables/seq_asv_count_postQC.html")
-
-# tmp <- asv_insitu_qc %>% 
-#   group_by(SAMPLEID, VENT, DATASET, SITE, SAMPLETYPE, YEAR) %>%
-#     summarise(SEQ_SUM = sum(value),
-#      ASV_COUNT = n())
-# mean(tmp$SEQ_SUM); range(tmp$SEQ_SUM)
-# mean(tmp$ASV_COUNT); range(tmp$ASV_COUNT)
-# View(filter(tmp))
-```
-
-# Assess ASV presence/absence
-
-Set up analysis to classify each ASV based on distribution
-
-```{r Classification of ASVs by dataset and sample type, eval=FALSE}
-# head(asv_insitu_qc)
-# head(insitu_wide)
-# unique(asv_insitu_qc$SAMPLETYPE)
-# unique(asv_insitu_qc$SITE)
-
-tax_asv_id <- asv_insitu_qc %>% 
-  filter(value > 0) %>% #remove zero values
-  select(FeatureID, SITE, SAMPLETYPE) %>% # isolate only ASVs that are PRESENT at a site and sampletype
-  distinct() %>% #unique this, as presense = present in at least 1 rep (where applicable)
-  unite(sample_id, SITE, SAMPLETYPE, sep = "_") %>% 
-  # select(-SITE) %>% 
-  # distinct() %>% 
-  add_column(present = 1) %>%
-  pivot_wider(names_from = sample_id, values_from = present, values_fill = 0) %>% 
-  rowwise() %>% 
-  mutate_at(vars(FeatureID), factor)
-```
-
-Is an ASV present only at the vent site? plume? or background? What
-about background and plume only?
-
-```{r Assess presence of samples, eval=FALSE}
-library(purrr)
-any_cols <- function(tax_asv_id) reduce(tax_asv_id, `|`)
-
-asv_class <- tax_asv_id %>%
-  mutate(vent = ifelse(any_cols(across(contains("_Vent"), ~ . > 0)), "VENT", ""),
-         plume= ifelse(any_cols(across(contains("_Plume"), ~ . > 0)), "PLUME", ""),
-         bsw = ifelse(any_cols(across(contains("_Background"), ~ . > 0)), "BSW", ""),
-         ) %>% 
-  unite(class_tmp, vent, plume, bsw, sep = "_", na.rm = TRUE) %>% 
-  mutate(CLASS = case_when(
-  class_tmp == "VENT__" ~ "Vent only",
-  class_tmp == "_PLUME_" ~ "Plume only",
-  class_tmp == "__BSW" ~ "Background only",
-  class_tmp == "VENT__BSW" ~ "Vent & background",
-  class_tmp == "VENT_PLUME_BSW" ~ "Vent, plume, & background",
-  class_tmp == "VENT_PLUME_" ~ "Vent & plume",
-  class_tmp == "_PLUME_BSW" ~ "Plume & background"
-  )) %>% 
-  select(FeatureID, CLASS) %>% distinct()
-
-colnames(tax_asv_id)
-```
-
-Binary data frame with 1 indicating presence of ASV (rows) in a given
-sample (columns)
-
-Depending on prevalence of ASV, assign groupings of location.
-
-```{r Assign ASV prevalence, eval=FALSE}
-asv_class_SITE <- tax_asv_id %>%
-  mutate(
-    # mcr = ifelse(any_cols(across(contains("Piccard") | contains("VonDamm"), ~ . > 0)), "MCR", ""),
-        picc = ifelse(any_cols(across(contains("Piccard"), ~ . > 0)), "Picc", ""),
-        vd = ifelse(any_cols(across(contains("VonDamm"), ~ . > 0)), "VD", ""),
-         axial = ifelse(any_cols(across(contains("Axial"), ~ . > 0)), "AxS", ""),
-         gr = ifelse(any_cols(across(contains("Gorda"), ~ . > 0)), "GR", "")
-         ) %>% 
-  # unite(class_tmp, mcr, axial, gr, sep = "_", na.rm = TRUE) %>%
-  unite(class_tmp, picc, vd, axial, gr, sep = "_", na.rm = TRUE) %>% 
-  # unique(asv_class_SITE$class_tmp)
-  mutate(SITE_CLASS = case_when(
-  class_tmp == "___GR" ~ "Gorda Ridge only",
-  class_tmp == "__AxS_" ~ "Axial only",
-  class_tmp == "_VD__" ~ "Von Damm only",
-  class_tmp == "Picc_VD__" ~ "Piccard & Von Damm",
-  class_tmp == "Picc___" ~ "Piccard only",
-  class_tmp == "Picc_VD_AxS_" ~ "MCR & Axial",
-  class_tmp == "__AxS_GR" ~ "Axial & Gorda Ridge",
-  class_tmp == "_VD__GR" ~ "Von Damm & Gorda Ridge",
-  class_tmp == "_VD_AxS_GR" ~ "Von Damm, Axial, & Gorda Ridge",
-  class_tmp == "_VD_AxS_" ~ "Von Damm & Axial",
-  # class_tmp == "MCR__" ~ "Mid-Cayman Rise",
-  class_tmp == "Picc_VD__GR" ~ "MCR & Gorda Ridge",
-  class_tmp == "Picc__AxS_GR" ~ "Piccard, Axial, & Gorda Ridge",
-  class_tmp == "Picc___GR" ~ "Piccard & Gorda Ridge",
-  class_tmp == "Picc__AxS_" ~ "Piccard & Axial",
-  class_tmp == "Picc_VD_AxS_GR" ~ "All sites"
-  )) %>% 
-  select(FeatureID, SITE_CLASS) %>% distinct()
-# View(select(asv_class_SITE, SITE_CLASS) %>% distinct())
-```
-
-Combine together with original ASV table
-
-```{r Combine ASV classifications, eval=FALSE}
-insitu_asv_wClass <- asv_insitu_qc %>% 
-  left_join(asv_class) %>% 
-  left_join(asv_class_SITE)
-# head(insitu_asv_wClass)
-```
-
-Visualize the total number of ASVs in background, plume, versus
-background.
-
-```{r, fig.height=4, fig.width=8, tidy=FALSE, eval=FALSE}
-# head(asv_insitu_qc)
-# svg("bubbles.svg", h = 4, w = 8)
-asv_insitu_qc %>% 
-  select(DATASET, FeatureID, SAMPLETYPE) %>% 
-  group_by(DATASET, SAMPLETYPE) %>% 
-    summarise(COUNT = n_distinct(FeatureID)) %>% 
-  ggplot(aes(x = DATASET, y = SAMPLETYPE, fill = SAMPLETYPE)) +
-    geom_point(aes(size = COUNT), shape = 21, color = "black") +
-    scale_size_continuous(range = c(4,20)) +
-  scale_fill_viridis_d(option = "B") +
-  theme_void() +
-  theme(legend.position = "right",
-        axis.text = element_text(color = "black"))
-# dev.off()
-```
-
-Bubble plot reporting the total number of ASVs found in the vent, plume,
-versus background. At each site, the vent protist population had a
-higher total number of ASVs.
-
-Repeat visualization by ASV distribution category.
-
-```{r, fig.height=8, fig.width=9, eval=FALSE}
-# head(insitu_asv_wClass)
-insitu_asv_wClass %>% 
-  select(DATASET, FeatureID, SAMPLETYPE, CLASS) %>% 
-  group_by(DATASET, SAMPLETYPE, CLASS) %>% 
-    summarise(COUNT = n_distinct(FeatureID)) %>% 
-  ggplot(aes(x = DATASET, y = SAMPLETYPE, fill = SAMPLETYPE)) +
-    geom_point(aes(size = COUNT), shape = 21, color = "black") +
-    scale_size_continuous(range = c(4,20)) +
-  scale_fill_viridis_d(option = "B") +
-  theme_void() +
-  theme(legend.position = "right",
-        axis.text.x = element_text(color = "black"),
-        axis.title.y = element_blank()) +
-  facet_grid(SAMPLETYPE + CLASS ~ ., scales = "free", space = "free") +
-  labs(x = "", y = "", title = "Total number of ASVs by distribution & sample type")
-```
-
-Repeated bubble plot reports the total number of ASVs in the vent,
-plume, and background - but now further separated by distribution (i.e.,
-if an ASV was found only in the vent and plume = "Vent & plume"). The
-largest portion of ASVs were found only at the vent sites (Vent only).
-
-Categories for ASV distribution:
-
-```{r Review classification text, eval=FALSE}
-unique(insitu_asv_wClass$CLASS)
-unique(insitu_asv_wClass$SITE_CLASS)
-length(unique(insitu_asv_wClass$FeatureID))
-sum(insitu_asv_wClass$value)
-```
-
-# Save working ASV table
-
-Checkpoint to save working dataframes.
-
-```{r, eval=FALSE}
-save(asv_insitu, asv_insitu_qc, insitu_asv_wClass, file = "asv-tables-processed-18102021.RData")
-```
 
 # Functions to explore community diversity
 
@@ -839,7 +82,7 @@ axial <- c("Axial")
 mcr <- c("VonDamm", "Piccard")
 gr <- c("GordaRidge")
 all <- c("Axial", "VonDamm", "Piccard", "GordaRidge")
-load("asv-tables-processed-18102021.RData", verbose = TRUE)
+load("data-input/asv-tables-processed-27012022.RData", verbose = TRUE)
 ```
 
 ## Bar plot function
@@ -1629,7 +872,7 @@ to_supergroup %>%
 # head(to_supergroup)
 totalsum_supergroup <- sum(to_supergroup$SEQ_SUM)
 
-to_supergroup %>% 
+table_perc_supergroup <- to_supergroup %>% 
   group_by(SITE) %>% 
   mutate(SUM_SITE = sum(SEQ_SUM)) %>%
   ungroup() %>% 
@@ -3718,7 +2961,16 @@ rownames(insitu_tax_matrix) <- row.names(insitu_asv_matrix)
 
 Reformat metadata, but change to numeric.
 ```{r}
+metadata <- read.delim("data-input/samplelist-metadata.txt", na.strings = "")
+
 ## Extract relevant metadata information
+metadata_formatted <- metadata %>% 
+  mutate_all(as.character) %>%
+  filter(Sample_or_Control == "Sample") %>% 
+  filter(!(SAMPLETYPE == "Incubation")) %>% 
+  filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
+  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc, Sample_or_Control)
+
 # Ensure these columns are converted to numeric
 env_params <- c("DEPTH", "TEMP", "pH", "PercSeawater", "Mg", "H2", "H2S", "CH4", "ProkConc")
 
@@ -4661,13 +3913,10 @@ check_tax_interact <- function(tax){
 
 # Test influence of abiotic/biotic factors on community composition.
 
-
-
 ## Import and format dataset
 Import phyloseq-saved RObjects.
 ```{r}
 # library(tidyverse); library(phyloseq); library(compositions); library(vegan)
-# load("asv-tables-processed-18102021.RData", verbose = TRUE)
 load("phyloseq-objs-180122.RData", verbose = TRUE)
 ```
 
@@ -4701,20 +3950,17 @@ SITE
 anova(beta_SITE)
 TukeyHSD(beta_SITE)
 plot(beta_SITE)
+# View(beta_SITE$vectors) # to confirm sample that is an outlier
 ```
 Sampletype
 ```{r}
 anova(beta_SAMPLETYPE)
 TukeyHSD(beta_SAMPLETYPE)
 plot(beta_SAMPLETYPE)
+# View(beta_SAMPLETYPE$vectors)
 ```
-Type site - too much resolution? This isn't really how I'm setting up the comparison groups anyway, so its fine.
 
-```{r}
-anova(beta_TYPE_SITE)
-TukeyHSD(beta_TYPE_SITE)
-plot(beta_TYPE_SITE)
-```
+Based on dispersion testing, it is clear that Boca (Axial, snowblower vent) is an outlier. Secondary to Boca, however are the plume and CTD (Background samples).
 
 Permutest outputs
 ```{r}
@@ -4726,23 +3972,54 @@ permutest(beta_SITE, pairwise = TRUE, permutations = 999)
 permutest(beta_SAMPLETYPE, pairwise = TRUE, permutations = 999)
 ```
 
+Repeat dispersion test with removed samples, Boca and background.
+
 ```{r}
-# permutest(beta_TYPE_SITE, pairwise = TRUE, permutations = 999)
+count_table_clr_noboca <- compositions::clr(otu_table(subset_samples(physeq_insitu, VENT != "Boca")))
+
+count_table_clr_nobocaBSW <- compositions::clr(otu_table(subset_samples(physeq_insitu, (VENT != "Boca" & SAMPLETYPE == "Vent"))))
+# names(count_table_clr_nobocaBSW)
+
+# CLR-transformed data, transpose and create euclidean dist matrix
+dist_euc_noboca <- vegdist(t(count_table_clr_noboca), method = "euclidean")
+
+dist_euc_nobocaBSW <- vegdist(t(count_table_clr_nobocaBSW), method = "euclidean")
+# ?vegdist()
 ```
 
-Summary of disperson tests: Site and sample type has an influence on the disperson of all samples, but it is to be expected. For now, will perform analysis with all samples. 
+Re-check dispersion without Boca sample.
+```{r}
+beta_SITE <- betadisper(dist_euc_noboca, sample_data(subset_samples(physeq_insitu, VENT != "Boca"))$SITE)
+anova(beta_SITE)
+TukeyHSD(beta_SITE)
+plot(beta_SITE)
+# View(beta_SITE$vectors) # to confirm samples that are outliers
+```
+
+Check dispersion without Boca or background samples.
+```{r}
+beta_SITE <- betadisper(dist_euc_nobocaBSW, sample_data(subset_samples(physeq_insitu, (VENT != "Boca" & SAMPLETYPE == "Vent")))$SITE)
+anova(beta_SITE)
+TukeyHSD(beta_SITE)
+plot(beta_SITE)
+# View(beta_SITE$vectors) # to confirm sample that is an outlier
+```
 
 ### Adonis
-Use ```adonis()``` to examine categorical significance
+Use ```adonis()``` to examine categorical significance. Use ```dist_euc_noboca``` or ```dist_euc_nobocaBSW```.
 ```{r}
 set.seed(1212)
 
-adonis(dist_euc ~ sample_data(physeq_insitu)$SITE, permutations = 999) # Categorical with vent site
+adonis(dist_euc_noboca ~ sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$SITE, permutations = 999) # Categorical with vent site
 ```
 > Influence of vent site on sample communities is significant.
 
 ```{r}
 adonis(dist_euc ~ sample_data(physeq_insitu)$SITE + sample_data(physeq_insitu)$SAMPLETYPE, permutations = 999) # Categorical with vent site
+```
+
+```{r}
+adonis(dist_euc_nobocaBSW ~ sample_data(subset_samples(physeq_insitu, (VENT != "Boca" & SAMPLETYPE == "Vent")))$SITE, permutations = 999) # Categorical with vent site
 ```
 
 
@@ -4753,18 +4030,21 @@ Isolate numerics for each parameter to be tested below.
 ```{r}
 # names(sample_data(physeq_insitu))
 # Numerics - geochem
-temp <- sample_data(physeq_insitu)$TEMP
-ph <- sample_data(physeq_insitu)$pH
-persea <- sample_data(physeq_insitu)$PercSeawater
-mg <- sample_data(physeq_insitu)$Mg
-h2 <- sample_data(physeq_insitu)$H2
-h2s <- sample_data(physeq_insitu)$H2S
-ch4 <- sample_data(physeq_insitu)$CH4
-prok <- sample_data(physeq_insitu)$ProkConc
+# use dist_euc_noboca
+# and: sample_data(subset_samples(physeq_insitu, (VENT != "Boca"))
+
+temp <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$TEMP
+ph <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$pH
+persea <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$PercSeawater
+mg <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$Mg
+h2 <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$H2
+h2s <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$H2S
+ch4 <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$CH4
+prok <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$ProkConc
 
 # categorical (logic)
-sampletype <- sample_data(physeq_insitu)$SAMPLETYPE
-site <- sample_data(physeq_insitu)$SITE
+sampletype <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$SAMPLETYPE
+site <- sample_data(subset_samples(physeq_insitu, (VENT != "Boca")))$SITE
 ```
 
 ## Distance-based redundancy analysis
@@ -4775,7 +4055,7 @@ Below ```dbrda()``` statement inputs all samples as a distance matrix (Euclidean
 
 ```{r}
 # ?dbrda()
-vent_microeuk_rda <- dbrda(dist_euc ~ temp + ph + persea + mg + h2 + h2s + ch4 + prok, dist = 'euc', na.action = na.exclude)
+vent_microeuk_rda <- dbrda(dist_euc_noboca ~ temp + ph + persea + mg + h2 + h2s + ch4 + prok, dist = 'euc', na.action = na.exclude)
 
 # na.exclude: includes NAs for scores of missing observations (use this)
 # na.omit: only non-missing sites scores are shown
@@ -4790,9 +4070,6 @@ anova(vent_microeuk_rda) #overall significance
 # Axes; set x and y equal to variance of axes.
 xy <- anova(vent_microeuk_rda, by = 'axis')
 x <- round(xy$Variance[1], 1); y <- round(xy$Variance[2], 1)
-
-# by terms
-# anova(vent_microeuk_rda, by = 'terms')
 
 # by margin
 anova(vent_microeuk_rda, by = 'margin')
@@ -4810,26 +4087,22 @@ plot(vent_microeuk_rda, xlab = x, ylab = y)
 Try with condition set to sample type. QUESTION: Null for the below... if we account for differences in Condition X... are the parameters still significant? Below results suggest that when we account for vent site or sample type, the parameters are not significant. 
 
 ```{r}
-vent_microeuk_rda_sampletype <- dbrda(dist_euc ~ temp + ph + persea + mg + h2 + h2s + ch4 + prok + Condition(sampletype), dist = 'euc', na.action = na.exclude)
+# vent_microeuk_rda_sampletype <- dbrda(dist_euc_noboca ~ temp + ph + persea + mg + h2 + h2s + ch4 + prok + Condition(sampletype), dist = 'euc', na.action = na.exclude)
 
-anova(vent_microeuk_rda_sampletype, by = 'margin')
+# anova(vent_microeuk_rda_sampletype, by = 'terms')
 ```
 
 Try with condition set to site.
 ```{r}
-vent_microeuk_rda_site <- dbrda(dist_euc ~ temp + ph + persea + mg + h2 + h2s + ch4 + prok + Condition(site), dist = 'euc', na.action = na.exclude)
+vent_microeuk_rda_site <- dbrda(dist_euc_noboca ~ temp + ph + persea + mg + h2 + h2s + ch4 + prok + Condition(site), dist = 'euc', na.action = na.exclude)
 
-anova(vent_microeuk_rda_site, by = 'margin')
+anova(vent_microeuk_rda_site, by = 'terms')
 ```
 
 
 ## Functions for DBRDA analysis
 
-```{r}
-subset_df <- subset_samples(physeq_insitu, SITE == "Axial")
-# head
-```
-
+With various outliers depending on the question posed, below function takes subsetted data and runs ```dbrda()``` analysis.
 
 ```{r}
 dbrda_subset <- function(subset_df){
@@ -4862,23 +4135,28 @@ dbrda_subset <- function(subset_df){
 
 Check sample data categories fpr further testing.
 ```{r}
-sample_data(physeq_insitu)
+# sample_data(physeq_insitu)
 ```
 
 
 ## Stats for vent sites
+
+Removed Boca outlier and isolate vent-only sites, test for significant parameters.
 ```{r}
-dbrda_subset(subset_samples(physeq_insitu, SAMPLETYPE == "Vent"))
+dbrda_subset(subset_samples(physeq_insitu, (VENT != "Boca" & SAMPLETYPE == "Vent")))
 ```
 
-Temperature, methane, and then H2.
+Compare with original (redundant to above) with only removal of Boca outlier.
+```{r}
+dbrda_subset(subset_samples(physeq_insitu, VENT != "Boca"))
+```
+
+Temperature and methane.
 
 ## Stats for Axial
-Subset to only vent sites - check significance of year.
-Subset to all sites - check significant of year again.
+Subset to only Axial samples (remove Boca outlier) - check significance of year. Subset to vents only - check significant of year again.
 ```{r}
-AXIAL <- subset_samples(physeq_insitu, SITE == "Axial")
-# AXIAL <- subset_samples(physeq_insitu, (SITE == "Axial" & SAMPLETYPE == "Vent"))
+AXIAL <- subset_samples(physeq_insitu, (SITE == "Axial" & VENT != "Boca"))
 clr_out <- compositions::clr(otu_table(AXIAL))
 euc_out <- vegdist(t(clr_out), method = "euclidean")
   
@@ -4887,11 +4165,15 @@ adonis(euc_out ~ sample_data(AXIAL)$YEAR, permutations = 999)
 
 Year was not significant at Axial. Although, year to year sampling was not consistent.
 
+```{r}
+# dbrda_subset(subset_samples(AXIAL, SAMPLETYPE == "Vent"))
+```
+
+
 ## Stats for MCR
 Subset to vent sites only - check significance of Piccard vs. VD. Geochem?
 ```{r}
 MCR <- subset_samples(physeq_insitu, (SITE == "Piccard" | SITE == "VonDamm"))
-# MCR <- subset_samples(physeq_insitu, (SITE == "Axial" & SAMPLETYPE == "Vent"))
 clr_out <- compositions::clr(otu_table(MCR))
 euc_out <- vegdist(t(clr_out), method = "euclidean")
 # sample_data(MCR)  
@@ -4905,7 +4187,6 @@ Site was not significant factor within the 2 Mid-Cayman Rise vent sites.
 
 Check significance of all environmental parameters with the resident population.
 
-
 Isolate vent-only ASVs
 ```{r}
 tmp <- filter(insitu_asv_wClass, CLASS == "Vent only")
@@ -4916,129 +4197,37 @@ res_vent <- prune_taxa(list_of_resident, physeq_insitu)
 ```
 
 ```{r}
-dbrda_subset(subset_samples(res_vent, SAMPLETYPE == "Vent"))
+# dbrda_subset(subset_samples(res_vent, (SAMPLETYPE == "Vent")))
+# Run with Boca outlier removed.
+dbrda_subset(subset_samples(res_vent, (SAMPLETYPE == "Vent" & VENT != "Boca")))
 ```
+
+When we isolate only resident taxa (ASV detected only at vent sites), significance geochem parameters include temperature, percent seawater, H2, and CH4.
 
 ## Isolate individual taxa
+
+Run similar analysis, but isolate individual taxa. First isolate phyloseq objects to be without the Boca outlier and one with only vent sites.
 ```{r}
-head(tax_table(physeq_insitu))
+# head(tax_table(physeq_insitu))
+ventonly_noboca <- subset_samples(physeq_insitu, (SAMPLETYPE == "Vent" & VENT != "Boca"))
+
+noboca <- subset_samples(physeq_insitu, (VENT != "Boca"))
 ```
-Ciliates
+Ciliates: geochemistry and related parameters did not correspond to ciliate population.
 ```{r}
-dbrda_subset(subset_taxa(physeq_insitu, Phylum == "Ciliophora"))
+dbrda_subset(subset_taxa(noboca, (Phylum == "Ciliophora")))
+dbrda_subset(subset_taxa(ventonly_noboca, (Phylum == "Ciliophora")))
 ```
-Stramenopiles, MAST mostly.
+Stramenopiles, MAST mostly: Temperature, H2, and CH4 were found to be significant drivers of stramenopile diversity and distribution.
 ```{r}
-dbrda_subset(subset_taxa(physeq_insitu, Phylum == "Sagenista"))
+dbrda_subset(subset_taxa(noboca, Phylum == "Sagenista"))
+dbrda_subset(subset_taxa(ventonly_noboca, Phylum == "Sagenista"))
 ```
-Radiolaria
+Radiolaria: no geochemical parameters drove radiolaria population distribution.
 ```{r}
-dbrda_subset(subset_taxa(physeq_insitu, Phylum == "Radiolaria"))
+dbrda_subset(subset_taxa(noboca, Phylum == "Radiolaria"))
+dbrda_subset(subset_taxa(ventonly_noboca, Phylum == "Radiolaria"))
 ```
-
-
-## Visualize samples via temperature & prokaryote cell concentration
-
-Plot sequence relative abundance by temperature and prokaryote
-concentration. These two parameters were chosen because I have the most metadata from them. If a sample was not countable or had no temperature
-record, it was removed.
-
-### Plot as a factor of relative sequence abundance
-
-```{r, fig.height=15, fig.width=20, tidy=FALSE}
-# asv_insitu_qc %>% 
-#     # filter(SITE %in% selection) %>% 
-#     filter(!is.na(TEMP)) %>% 
-#     filter(!is.na(ProkConc)) %>% 
-#     filter(Domain == "Eukaryota") %>%
-#     mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
-#            Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
-#            Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
-#            Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
-#     group_by(FeatureID, Taxon, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species,
-#              VENT, SITE, SAMPLETYPE, YEAR, DATASET, TEMP, ProkConc) %>% 
-#     summarise(SEQ_AVG_REP = mean(value)) %>% 
-#     ungroup() %>% 
-#     unite(SupergroupPhylum, Supergroup, Phylum, sep = "-") %>% 
-#     group_by(SITE, SAMPLETYPE, VENT, YEAR, SupergroupPhylum, TEMP, ProkConc) %>% 
-#       summarise(SEQ_SUM = sum(SEQ_AVG_REP)) %>% 
-#     ggplot(aes(x = ProkConc, y = as.numeric(TEMP), fill = SITE, shape = SAMPLETYPE)) +
-#       geom_point(color = "black", aes(size = SEQ_SUM)) +
-#       scale_size_continuous(range = c(4,9)) +
-#       scale_shape_manual(values = c(21, 23, 24)) +
-#       scale_x_log10() +
-#       facet_wrap(SupergroupPhylum ~., scale = "free") +
-#       theme_linedraw() +
-#       theme(axis.text = element_text(color = "black", size = 12),
-#           strip.background = element_blank(), strip.text = element_text(color = "black"),
-#           legend.position = "right") +
-#     # scale_y_continuous(expand = c(0,0)) +
-#     scale_fill_manual(values = c("#feb24c", "#addd8e", "#de2d26", "#1c9099")) +
-#     guides(fill = guide_legend(override.aes = list(shape = c(21))),
-#            shape = guide_legend(override.aes = list(fill = "black"))) +
-#     labs(x = bquote("Cells "~mL^-1 ~hr^-1), y = "Temperature (C)")
-```
-
-### Plot as a factor of CLR transformed data
-
-Repeat above plot, but with CLR transformed data.
-
-```{r, fig.height=15, fig.width=20, tidy=FALSE}
-# df_wide_tmp <- asv_insitu_qc %>% 
-#     filter(!is.na(TEMP)) %>% 
-#     filter(!is.na(ProkConc)) %>% 
-#     filter(Domain == "Eukaryota") %>% 
-#     filter(value > 0) %>% 
-#   # Average across replicates
-#       group_by(FeatureID, SAMPLENAME, VENT, Domain, Supergroup, Phylum, Class, Order, Family, Genus, Species, TEMP, ProkConc) %>% 
-#         summarise(AVG = mean(value)) %>% 
-#       ungroup() %>% 
-#     # Sum to the Order taxonomic classification
-#     unite(SAMPLENAME_2, SAMPLENAME, VENT, TEMP, ProkConc, sep = "_") %>% 
-#     unite(TAX, FeatureID, Supergroup, Phylum, sep = " ") %>% 
-#     select(TAX, SAMPLENAME_2, AVG) %>% 
-#     pivot_wider(names_from = SAMPLENAME_2, values_from = AVG, values_fill = 0) %>% 
-#     column_to_rownames(var = "TAX")
-# 
-#   ## Take wide data frame and CLR transform, pivot to wide, and plot
-#   clr_long_df <- data.frame(compositions::clr(df_wide_tmp)) %>% 
-#       rownames_to_column(var = "TAX") %>%
-#       pivot_longer(cols = starts_with(all), values_to = "CLR", names_to = "SAMPLENAME_2") %>% 
-#       separate(SAMPLENAME_2, c("SAMPLENAME", "VENT", "TEMP", "ProkConc"), sep = "_") %>% 
-#       separate(SAMPLENAME, c("SITE", "SAMPLETYPE", "YEAR", "Sample_tmp"), remove = TRUE) %>% 
-#       mutate(VENT = str_replace_all(VENT, "\\.", " ")) %>% 
-#       mutate(REGION = case_when(
-#         SITE == "GordaRidge" ~ "Gorda Ridge",
-#         SITE %in% mcr ~ "Mid-Cayman Rise",
-#         SITE == "Axial" ~ "Axial")) %>% 
-#       mutate(VENTNAME = case_when(
-#         REGION == "Gorda Ridge" ~ VENT,
-#         REGION == "Mid-Cayman Rise" ~ paste(SITE, VENT, sep = " "),
-#         REGION == "Axial" ~ paste(VENT, YEAR, sep = " ")
-#       )) %>% select(-Sample_tmp) %>% 
-#     unite(SAMPLE, REGION, VENTNAME, sep = " ", remove = FALSE) %>% 
-#     separate(TAX, c("ASVid","Supergroup", "Phylum"), sep = " ", remove = TRUE) %>% 
-#     unite(SupergroupPhylum, Supergroup, Phylum, sep = "-")
-# 
-#   # head(clr_long_df)
-#   ## Plot
-#   clr_long_df %>% 
-#     filter(SAMPLETYPE == "Vent") %>% 
-#     ggplot(aes(x = as.numeric(ProkConc), y = as.numeric(TEMP), fill = CLR, shape = REGION)) +
-#       geom_point(color = "black", size = 3, aes(fill = CLR, shape = REGION)) +
-#       scale_fill_gradient2(low = "#4575b4", mid = "white", high = "#d73027", na.value = "grey50") +
-#       scale_shape_manual(values = c(21, 23, 24, 25)) +
-#       scale_x_log10() +
-#       facet_wrap(SupergroupPhylum ~ ., scale = "free") +
-#       theme_linedraw() +
-#       theme(axis.text = element_text(color = "black", size = 12),
-#           strip.background = element_blank(), strip.text = element_text(color = "black"),
-#           legend.position = "right") +
-#     guides(fill = guide_legend(override.aes = list(shape = c(21))),
-#            shape = guide_legend(override.aes = list(fill = "black"))) +
-#     labs(x = bquote("Cells "~mL^-1 ~hr^-1), y = "Temperature (C)")
-```
-
 
 # Session Info
 ```{r}

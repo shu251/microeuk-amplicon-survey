@@ -12,4 +12,4 @@ Sequence survey spanning three deep-sea hydrothermal vent habitats.
 
 ## Sequence analysis information
 
-See tag-sequence directory for code related to QIIME2 execution.
+See `seq-analysis`directory for code related to QIIME2 execution. All upstream processing of sequences from QIIME2 can be found [here](https://github.com/shu251/microeuk-amplicon-survey/tree/main/seq-analysis).
