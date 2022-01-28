@@ -39,7 +39,7 @@ Taxonomic assignment done with vsearch using the PR2 database (v4.14) at
 
 After determining ASVs for each sequence run, ASV tables were merged.
 
-```{r Import taxonomy and ASV table, message=FALSE, eval=FALSE}
+```{r Import taxonomy and ASV table, message=FALSE}
 merged_tax <- read_delim("../data-input/taxonomy.tsv", delim = "\t")
 merged_asv <- read_delim("../data-input/microeuk-merged-asv-table.tsv", delim = "\t", skip = 1)
 # head(merged_tax)
@@ -77,7 +77,7 @@ metadata_formatted <- metadata %>%
 Remove samples from Gorda Ridge microcolonizers and from the FLP
 experiments (Gorda Ridge and Mid-Cayman Rise).
 
-```{r Join taxonomy and ASV data, eval=FALSE}
+```{r Join taxonomy and ASV data}
 asv_wtax <- merged_asv %>%
   select(FeatureID = '#OTU ID', everything()) %>%
   pivot_longer(cols = !FeatureID,
@@ -115,7 +115,7 @@ sequences, they will be removed below.
 This newest version of PR2 has bacteria and archaea in it. Very, very
 few were assigned to this. Majority assigned to eukaryotes.
 
-```{r Plot total ASV and sequences, eval=FALSE, fig.height=11, fig.width=14}
+```{r Plot total ASV and sequences, fig.height=11, fig.width=14}
 # head(asv_wtax)
 library(viridis)
 plot_grid(
@@ -154,7 +154,7 @@ plot_grid(
 
 ### Table reporting total ASVs and sequences
 
-```{r Total ASVs raw, eval=FALSE}
+```{r Total ASVs raw}
 table_raw_stats <- asv_wtax %>% filter(value > 0) %>%
        group_by(SAMPLENAME, DATASET, SITE) %>%
        summarise(SEQ_SUM = sum(value),
@@ -177,13 +177,13 @@ Import sample description text file, import as phyloseq library, and
 remove potential contaminate ASVs and sequences. Catalog total number of
 ASVs and sequences removed from analysis.
 
-```{r Load libraries for decontam, eval=FALSE}
+```{r Load libraries for decontam}
 # library(decontam); library(phyloseq)
 ```
 
 ### Import as phyloseq objects
 
-```{r Extract taxa and sample info as matrix for phyloseq input, eval=FALSE}
+```{r Extract taxa and sample info as matrix for phyloseq input}
 tax_matrix <- merged_tax %>% 
   select(FeatureID = `Feature ID`, Taxon) %>% 
   separate(Taxon, c("Domain", "Supergroup", 
@@ -204,7 +204,7 @@ rownames(tax_matrix) <- row.names(asv_matrix)
 row.names(metadata) <- metadata$SAMPLE
 ```
 
-```{r Phyloseq import, eval=FALSE}
+```{r Phyloseq import}
 # Import asv and tax matrices
 ASV = otu_table(asv_matrix, taxa_are_rows = TRUE)
 TAX = tax_table(tax_matrix)
@@ -223,12 +223,12 @@ physeq_wnames = merge_phyloseq(phylo_obj, samplenames)
 
 ### Identify contaminant ASVs
 
-```{r Assign control samples, eval=FALSE}
+```{r Assign control samples}
 # When "Control" appears in "Sample_or_Control column, this is a negative control"
 sample_data(physeq_wnames)$is.neg <- sample_data(physeq_wnames)$Sample_or_Control == "Control"
 ```
 
-```{r Identify contaminant ASVs, eval=FALSE}
+```{r Identify contaminant ASVs}
 # ID contaminants using Prevalence information
 contam_prev <- isContaminant(physeq_wnames, 
                                method="prevalence", 
@@ -246,7 +246,7 @@ table(contam_prev$contaminant)
 
 ### Remove problematic ASVs
 
-```{r Assign contaminant ASVs, eval=FALSE}
+```{r Assign contaminant ASVs}
 # Subset contaminant ASVs
 contams <- filter(contam_prev, contaminant == "TRUE")
 list_of_contam_asvs <- as.character(row.names(contams))
@@ -258,7 +258,7 @@ taxa_contam <- as.data.frame(tax_matrix) %>%
 # head(taxa_contam)
 ```
 
-```{r Compare decontaminated data with original, eval=FALSE}
+```{r Compare decontaminated data with original}
 # View(asv_wtax)
 asv_wtax_decon <- asv_wtax %>% 
   filter(!(FeatureID %in% list_of_contam_asvs)) %>% 
@@ -291,7 +291,7 @@ asv_wtax_wstats <- asv_wtax %>%
     3788791 total sequences. There was a total loss of 0.74% of
     sequences.
 
-```{r, fig.height=18, fig.width=18, eval=FALSE}
+```{r, fig.height=18, fig.width=18}
 plot_grid(asv_wtax_wstats %>% 
   filter(value > 0) %>% 
   ggplot(aes(x = SAMPLE, fill = DECONTAM)) +
@@ -324,7 +324,7 @@ that indicated the potentially contaminate ASVs.
 
 # Survey of sequences from *in situ* samples
 
-```{r Isolate in situ only, eval=FALSE}
+```{r Isolate in situ only}
 # colnames(asv_wtax_wstats)
 # unique(asv_wtax_wstats$SAMPLE)
 sites <- c("Piccard", "VonDamm", "Axial", "GordaRidge")
@@ -343,7 +343,7 @@ length(unique(asv_insitu$FeatureID)) #12,378 ASVs
 Additional sample QC, check replicates, and determine if replicates
 should be averaged.
 
-```{r Investigate sequence and sample QC, fig.height=8, fig.width=15, eval=FALSE}
+```{r Investigate sequence and sample QC, fig.height=8, fig.width=15}
 plot_grid(asv_insitu %>% 
   group_by(SAMPLENAME, VENT, DATASET, Domain) %>% 
   summarise(seqsum_var = sum(value),
@@ -377,7 +377,7 @@ ncol = 2)
 
 ## Base bar plot - taxonomy
 
-```{r Review taxonomy and make bar plot, fig.width=15, fig.height=8, eval=FALSE}
+```{r Review taxonomy and make bar plot, fig.width=15, fig.height=8}
 asv_insitu %>% 
   filter(Domain == "Eukaryota") %>%
   # unite(SampleIdentifier, VENT, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
@@ -406,7 +406,7 @@ asv_insitu %>%
 
 Repeat taxonomy barplot, but with relative abundance
 
-```{r Review taxonomy and make bar plot relative abundance, fig.width=15, fig.height=8, eval=FALSE}
+```{r Review taxonomy and make bar plot relative abundance, fig.width=15, fig.height=8}
 asv_insitu %>% 
   filter(Domain == "Eukaryota") %>%
   # unite(SampleIdentifier, VENT, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
@@ -438,7 +438,7 @@ asv_insitu %>%
 Filter samples so that the total number of sequences is greater than
 20,000 sequences.
 
-```{r, eval=FALSE}
+```{r}
 # head(asv_insitu)
 # unique(asv_insitu$Sample_or_Control)
 # hist(asv_insitu$value)
@@ -457,7 +457,7 @@ GordaRidge_BSW020_sterivex_2019_REPa removed due to too few sequences.
 
 Final table reporting total sequences and ASVs for each sample.
 
-```{r Remake table remove samples with too few sequences, eval=FALSE}
+```{r Remake table remove samples with too few sequences}
 asv_insitu_qc <- asv_insitu %>% 
   filter(!(SAMPLE %in% toofew)) %>% 
   filter(value > 0)
@@ -491,7 +491,7 @@ gtsave(stats_seq_asv_postQC, filename = "../output-tables/seq_asv_count_postQC.h
 
 Set up analysis to classify each ASV based on distribution
 
-```{r Classification of ASVs by dataset and sample type, eval=FALSE}
+```{r Classification of ASVs by dataset and sample type}
 # head(asv_insitu_qc)
 # head(insitu_wide)
 # unique(asv_insitu_qc$SAMPLETYPE)
@@ -513,7 +513,7 @@ tax_asv_id <- asv_insitu_qc %>%
 Is an ASV present only at the vent site? plume? or background? What
 about background and plume only?
 
-```{r Assess presence of samples, eval=FALSE}
+```{r Assess presence of samples}
 library(purrr)
 any_cols <- function(tax_asv_id) reduce(tax_asv_id, `|`)
 
@@ -541,7 +541,7 @@ Binary data frame with 1 indicating presence of ASV (rows) in a given sample (co
 
 Depending on prevalence of ASV, assign groupings of location.
 
-```{r Assign ASV prevalence, eval=FALSE}
+```{r Assign ASV prevalence}
 asv_class_SITE <- tax_asv_id %>%
   mutate(
     # mcr = ifelse(any_cols(across(contains("Piccard") | contains("VonDamm"), ~ . > 0)), "MCR", ""),
@@ -577,7 +577,7 @@ asv_class_SITE <- tax_asv_id %>%
 
 Combine together with original ASV table
 
-```{r Combine ASV classifications, eval=FALSE}
+```{r Combine ASV classifications}
 insitu_asv_wClass <- asv_insitu_qc %>% 
   left_join(asv_class) %>% 
   left_join(asv_class_SITE)
@@ -586,7 +586,7 @@ insitu_asv_wClass <- asv_insitu_qc %>%
 
 Visualize the total number of ASVs in background, plume, versus background.
 
-```{r, fig.height=4, fig.width=8, tidy=FALSE, eval=FALSE}
+```{r, fig.height=4, fig.width=8, tidy=FALSE}
 # head(asv_insitu_qc)
 # svg("bubbles.svg", h = 4, w = 8)
 asv_insitu_qc %>% 
@@ -609,7 +609,7 @@ higher total number of ASVs.
 
 Repeat visualization by ASV distribution category.
 
-```{r, fig.height=8, fig.width=9, eval=FALSE}
+```{r, fig.height=8, fig.width=9}
 # head(insitu_asv_wClass)
 insitu_asv_wClass %>% 
   select(DATASET, FeatureID, SAMPLETYPE, CLASS) %>% 
@@ -634,7 +634,7 @@ largest portion of ASVs were found only at the vent sites (Vent only).
 
 Categories for ASV distribution:
 
-```{r Review classification text, eval=FALSE}
+```{r Review classification text}
 unique(insitu_asv_wClass$CLASS)
 unique(insitu_asv_wClass$SITE_CLASS)
 length(unique(insitu_asv_wClass$FeatureID))
@@ -645,6 +645,6 @@ sum(insitu_asv_wClass$value)
 
 Checkpoint to save working dataframes.
 
-```{r, eval=FALSE}
+```{r}
 save(asv_insitu, asv_insitu_qc, insitu_asv_wClass, file = "../data-input/asv-tables-processed-27012022.RData")
 ```
