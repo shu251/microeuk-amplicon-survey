@@ -118,6 +118,7 @@ few were assigned to this. Majority assigned to eukaryotes.
 ```{r Plot total ASV and sequences, fig.height=11, fig.width=14}
 # head(asv_wtax)
 library(viridis)
+# svg("../../../../Manuscripts_presentations_reviews/deepsea-microeuk-ME/vectorgraphic-figures/figs1-seqstats.svg", h=11, w = 14)
 plot_grid(
   # Total number of ASVs
   asv_wtax %>% 
@@ -150,6 +151,7 @@ plot_grid(
         strip.background = element_blank(), strip.text = element_text(color = "black"),
         legend.position = "right"),
   ncol = 2, align = c("hv"), axis = c("lr"))
+# dev.off()
 ```
 
 ### Table reporting total ASVs and sequences
