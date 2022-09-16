@@ -1,7 +1,14 @@
 # Environmental characterization of all vent sites
 ## Three sites in separate ocean regions.
 
-metadata <- read.delim("data-input/samplelist-metadata.txt", na.strings = "")
+library(tidyverse); library(cowplot)
+library(phyloseq); library(decontam)
+library(compositions); library(patchwork); library(ggpubr)
+library(ggupset); library(gt); library(treemapify)
+library(plotly); library(viridis); library(vegan)
+
+
+metadata <- read.csv("data-input/samplelist-metadata.csv", na.strings = "")
 
 # Filter to environmental data only.
 # head(metadata)
@@ -12,10 +19,10 @@ env_deepsea <- metadata %>%
   filter(Sample_or_Control == "Sample") %>% 
   filter(!(SAMPLETYPE == "Incubation")) %>% 
   filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
-  select(VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc) %>%  
+  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc) %>%  
   pivot_longer(cols = TEMP:ProkConc, names_to = "VARIABLE", values_to = "VALUE", values_drop_na = FALSE) %>% 
   distinct() %>% 
-  group_by(VENT, COORDINATES, SITE, DEPTH, SAMPLETYPE, YEAR, VARIABLE) 
+  group_by(SAMPLE, VENT, COORDINATES, SITE, DEPTH, SAMPLETYPE, YEAR, VARIABLE) 
 
 # head(env_deepsea)
 # unique(env_deepsea$VARIABLE)
@@ -147,58 +154,63 @@ geomchem_table <- metadata %>%
   filter(Sample_or_Control == "Sample") %>% 
   filter(!(SAMPLETYPE == "Incubation")) %>% 
   filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
-  select(VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc) %>%  
+  select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc) %>%  
   pivot_longer(cols = TEMP:ProkConc, names_to = "VARIABLE", values_to = "VALUE", values_drop_na = FALSE) %>% 
   mutate(VALUE = as.numeric(as.character(VALUE))) %>% 
-  group_by(VENT, SITE, SAMPLETYPE, YEAR, VARIABLE) %>% 
-  summarise(VALUE_MEAN = mean(VALUE),
-            SampleIDs = paste(unique(SAMPLEID), collapse = ", "),
-            DEPTH_mean = mean(as.numeric(DEPTH)),
-            ) %>% 
-  pivot_wider(names_from = VARIABLE, values_from = VALUE_MEAN) %>%
+  # group_by(SAMPLE, VENT, SITE, SAMPLETYPE, YEAR, VARIABLE) %>% 
+  # summarise(VALUE_MEAN = mean(VALUE),
+  #           SampleIDs = paste(unique(SAMPLEID), collapse = ", "),
+  #           DEPTH_mean = mean(as.numeric(DEPTH)),
+  #           ) %>% 
+  pivot_wider(names_from = VARIABLE, values_from = VALUE) %>%
     left_join(all_coords %>% distinct(VENT, SITE, SAMPLETYPE, .keep_all=TRUE))
 # str(geomchem_table)
+# head(geomchem_table)
 # 
-write_delim(geomchem_table, file = "tableS1-geochem-params.txt", delim = "\t")
+# write_delim(geomchem_table, file = "tableS1-geochem-params.txt", delim = "\t")
 
 # View(geomchem_table)
 ###
 # Create gt table
 ###
 
-my_color_pal <- function(x) {
-  scales::col_numeric(
-    palette = paletteer::paletteer_d(
-      palette = "ggsci::red_material"
-    ) %>% as.character(),
-    domain = NULL
-  )(x)
-}
+# my_color_pal <- function(x) {
+#   scales::col_numeric(
+#     palette = paletteer::paletteer_d(
+#       palette = "ggsci::red_material"
+#     ) %>% as.character(),
+#     domain = NULL
+#   )(x)
+# }
 
 
 # - Percent Seawater = %
-# - Mg = mmol/kg (or mM)
+# - Mg = mmol/L (or mM)
 # - H2 = µmol/L (or µM)
 # - H2S = mmol/L (or mM)
 # - CH4 = µmol/L (or µM)
 
 table_all_geochem <- geomchem_table %>% 
   ungroup() %>% 
-  select(-SampleIDs) %>% 
+  # select(-SampleIDs) %>%
   mutate(Temperature = as.numeric(as.character(TEMP)),
          'Microbial concentration' = as.numeric(as.character(ProkConc)),
          'Percent Seawater' = (as.numeric(as.character(PercSeawater)))/100,
          pH = as.numeric(as.character(pH)),
-         'CH4 µM' = as.numeric(as.character(CH4)),
-         'Mg mM' = as.numeric(as.character(Mg)),
-         'H2 µM' = as.numeric(as.character(H2)),
-         'H2S mM' = as.numeric(as.character(H2S))
+         'CH4 µmol/L' = as.numeric(as.character(CH4)),
+         'Mg mmol/L' = as.numeric(as.character(Mg)),
+         'H2 µmol/L' = as.numeric(as.character(H2)),
+         'H2S mmol/L' = as.numeric(as.character(H2S)),
+         'Depth (m)' = as.numeric(as.character(DEPTH))
          ) %>%
   select(SITE, SAMPLETYPE, VENT, Year = YEAR, -TEMP, -ProkConc, -PercSeawater, -Mg, -H2S, -H2, -CH4, Temperature, 'Microbial concentration', 
-         'Percent Seawater', 'CH4 µM', pH,
-         'Mg mM', 'H2 µM', 'H2S mM', 'Depth (m)' = DEPTH_mean, LAT, LONG) %>% 
+         'Percent Seawater', 'CH4 µmol/L', pH,
+         'Mg mmol/L', 'H2 µmol/L', 'H2S mmol/L', 'Depth (m)', LAT, LONG) %>% 
   # unite(LOCATION, SITE, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
   group_by(SITE, SAMPLETYPE) %>% 
+  arrange(LAT) %>%
+  filter(VENT != "Quakeplume") %>% 
+  distinct() %>%  
   gt(
     groupname_col = c("SITE", "SAMPLETYPE"),
     rowname_col = c("VENT")
@@ -209,19 +221,20 @@ table_all_geochem <- geomchem_table %>%
              "VonDamm - Vent", "VonDamm - Plume", "VonDamm - Background",
              "Piccard - Vent", "Piccard - Plume", "Piccard - Background")
   ) %>%
-  data_color(columns = c(Temperature, 'Microbial concentration', 
-                         'Percent Seawater', 'CH4 µM', pH,
-                         'Mg mM', 'H2 µM', 'H2S mM'),
-             colors = my_color_pal) %>% 
+  # data_color(columns = c(Temperature, 'Microbial concentration', 
+  #                        'Percent Seawater', 'CH4 µmol/L', pH,
+  #                        'Mg mmol/L', 'H2 µmol/L', 'H2S mmol/L'),
+  #            colors = my_color_pal) %>% 
   fmt_number(columns = c('Depth (m)'), decimals = 0) %>%
   fmt_number(columns = c(Temperature), decimals = 1) %>% 
   fmt_scientific(columns = 'Microbial concentration') %>% 
   fmt_percent(columns = 'Percent Seawater', decimals = 0) %>% 
-  fmt_number(columns = c(pH), decimals = 1) %>%
-  fmt_number(columns = c('CH4 µM', 'Mg mM'), decimals = 1) %>% 
-  fmt_number(columns = c('H2 µM', 'H2S mM'), n_sigfig = 3) %>%
+  fmt_number(columns = c(pH), n_sigfig = 2) %>%
+  fmt_number(columns = c('Mg mmol/L'), n_sigfig = 3) %>% 
+  fmt_number(columns = c('CH4 µmol/L'), n_sigfig = 2) %>% 
+  fmt_number(columns = c('H2 µmol/L', 'H2S mmol/L'), n_sigfig = 2) %>%
   tab_header(
-    title = md("**Geochemistry & metadata for all samples**")
+    title = md("**Vent fluid parameters**")
   ) %>% 
   tab_spanner(
     label = "Location",
@@ -237,38 +250,13 @@ table_all_geochem <- geomchem_table %>%
   tab_style(
     style = cell_text(color = "black", weight = "bold"),
     locations = cells_stub()) %>% 
-  tab_source_note(md("*NAs represent not detected or not sampled*")) %>% 
+  tab_source_note(md("*NA represents not detected or not sampled*")) %>% 
   tab_options(table.width = px(500)) %>% 
   opt_table_lines()
-# table_all_geochem
-gtsave(table_all_geochem, filename = "geochemistry_all_gt.html", path = "output-tables/")
+table_all_geochem
+# gtsave(table_all_geochem, filename = "geochemistry_all_gt.html", path = "output-tables/")
 
 # install.packages("webshot")
 # webshot::install_phantomjs()
 # gtsave(table_all_geochem, filename = "geochemistry_all_gt.pdf", path = "output-tables/")
 # gtsave(table_all_geochem, filename = "geochemistry_all_gt.png", path = "output-tables/")
-
-#
-table_cluster <- geomchem_table %>% 
-  ungroup() %>% 
-  select(-SampleIDs) %>% 
-  mutate(Temperature = as.numeric(as.character(TEMP)),
-         'Microbial concentration' = as.numeric(as.character(ProkConc)),
-         'Percent Seawater' = (as.numeric(as.character(PercSeawater)))/100,
-         pH = as.numeric(as.character(pH)),
-         'CH4 µM' = as.numeric(as.character(CH4)),
-         'Mg mM' = as.numeric(as.character(Mg)),
-         'H2 µM' = as.numeric(as.character(H2)),
-         'H2S mM' = as.numeric(as.character(H2S))
-  ) %>%
-  select(SITE, SAMPLETYPE, VENT, Year = YEAR, -TEMP, -ProkConc, -PercSeawater, -Mg, -H2S, -H2, -CH4, Temperature, 'Microbial concentration', 
-         'Percent Seawater', 'CH4 µM', pH,
-         'Mg mM', 'H2 µM', 'H2S mM') %>% 
-  filter(SAMPLETYPE == "Vent") %>% select(-SAMPLETYPE) %>% 
-  unite(SAMPLE, SITE, VENT, Year, sep = " ") %>% 
-  column_to_rownames(var = "SAMPLE")
-# View(table_cluster)
-?hclust(ta)
-
-tree <- hclust(dist(table_cluster, method = "maximum"), method = "complete")
-plot(tree)
