@@ -22,4 +22,6 @@ Information on raw sequence files can be found through BCO-DMO:
 See `seq-analysis` directory for code related to QIIME2 execution. All upstream processing of sequences from QIIME2 can be found [here](https://github.com/shu251/microeuk-amplicon-survey/tree/main/seq-analysis).
 
 
-_last updated 9-14-2022_
+***
+
+_last updated 9-17-2022_
