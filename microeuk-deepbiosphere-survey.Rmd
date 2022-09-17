@@ -1652,7 +1652,7 @@ mutate(Perc_seq_total = (100*(SEQ_SUM/totalsum_supergroup)),
 library(geosphere)
 
 # Attach better coordinates (fixed in 'metadata-compilation-table.R')
-coords_input <- read.delim("tableS1-geochem-params.txt") %>% 
+coords_input <- read.delim("data-input/tableS1-geochem-params.txt") %>% 
   select(VENT, SITE, SAMPLETYPE, LONG, LAT) %>% 
   unite(SAMPLENAME, VENT, SITE, SAMPLETYPE, sep = "_") %>% 
   distinct(SAMPLENAME, .keep_all = TRUE) %>%
@@ -2329,7 +2329,7 @@ clr_to_plot_maintax(insitu_asv_wClass, res, mast)
 Run on HPC at WHOI.
 
 ```{r Load from local, eval=FALSE}
-load("asv-tables-processed-18102021.RData", verbose = T)
+load("data-input/asv-tables-processed-27012022.RData, verbose = T")
 ```
 
 DivNet package - diversity estimation hypothesis testing from Amy
@@ -2659,7 +2659,7 @@ Import data frames below and format as phyloseq. Subsample to select ASVs that a
 > Run below commands on HPC
 
 ```{r, eval=FALSE}
-load("asv-tables-processed-18102021.RData", verbose = T)
+load("data-input/asv-tables-processed-27012022.RData", verbose = T)
 ```
 ```{r, eval=FALSE}
 library(phyloseq)
