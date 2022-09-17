@@ -148,14 +148,14 @@ site_color <- c("#fdbb84", "#31a354", "#ef3b2c", "#02818a")
   
 # ?distinct()
 # geomchem_table
-
+# head(metadata)
 geomchem_table <- metadata %>% 
   mutate_all(as.character) %>%
   filter(Sample_or_Control == "Sample") %>% 
   filter(!(SAMPLETYPE == "Incubation")) %>% 
   filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
   select(SAMPLE, VENT, COORDINATES, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc) %>%  
-  pivot_longer(cols = TEMP:ProkConc, names_to = "VARIABLE", values_to = "VALUE", values_drop_na = FALSE) %>% 
+  pivot_longer(cols = TEMP:ProkConc, names_to = "VARIABLE", values_to = "VALUE") %>% 
   mutate(VALUE = as.numeric(as.character(VALUE))) %>% 
   # group_by(SAMPLE, VENT, SITE, SAMPLETYPE, YEAR, VARIABLE) %>% 
   # summarise(VALUE_MEAN = mean(VALUE),
@@ -165,7 +165,7 @@ geomchem_table <- metadata %>%
   pivot_wider(names_from = VARIABLE, values_from = VALUE) %>%
     left_join(all_coords %>% distinct(VENT, SITE, SAMPLETYPE, .keep_all=TRUE))
 # str(geomchem_table)
-# head(geomchem_table)
+head(geomchem_table)
 # 
 # write_delim(geomchem_table, file = "tableS1-geochem-params.txt", delim = "\t")
 
@@ -193,23 +193,25 @@ geomchem_table <- metadata %>%
 table_all_geochem <- geomchem_table %>% 
   ungroup() %>% 
   # select(-SampleIDs) %>%
-  mutate(Temperature = as.numeric(as.character(TEMP)),
-         'Microbial concentration' = as.numeric(as.character(ProkConc)),
+  mutate('Temperature (°C)' = as.numeric(as.character(TEMP)),
+         'Microbial concentration (cells/mL)' = as.numeric(as.character(ProkConc)),
          'Percent Seawater' = (as.numeric(as.character(PercSeawater)))/100,
          pH = as.numeric(as.character(pH)),
-         'CH4 µmol/L' = as.numeric(as.character(CH4)),
-         'Mg mmol/L' = as.numeric(as.character(Mg)),
-         'H2 µmol/L' = as.numeric(as.character(H2)),
-         'H2S mmol/L' = as.numeric(as.character(H2S)),
+         'CH4 µmol/L (µM)' = as.numeric(as.character(CH4)),
+         'Mg mmol/L (mM)' = as.numeric(as.character(Mg)),
+         'H2 µmol/L (µM)' = as.numeric(as.character(H2)),
+         'H2S mmol/L (mM)' = as.numeric(as.character(H2S)),
          'Depth (m)' = as.numeric(as.character(DEPTH))
          ) %>%
-  select(SITE, SAMPLETYPE, VENT, Year = YEAR, -TEMP, -ProkConc, -PercSeawater, -Mg, -H2S, -H2, -CH4, Temperature, 'Microbial concentration', 
-         'Percent Seawater', 'CH4 µmol/L', pH,
-         'Mg mmol/L', 'H2 µmol/L', 'H2S mmol/L', 'Depth (m)', LAT, LONG) %>% 
+  # replace_na("na") %>% 
+  select(SITE, SAMPLETYPE, VENT, Year = YEAR, -TEMP, -ProkConc, -PercSeawater, -Mg, -H2S, -H2, -CH4, 'Temperature (°C)', 'Microbial concentration (cells/mL)', 
+         'Percent Seawater', 'CH4 µmol/L (µM)', pH,
+         'Mg mmol/L (mM)', 'H2 µmol/L (µM)', 'H2S mmol/L (mM)', 'Depth (m)', Latitude=LAT, Longitude=LONG) %>% 
   # unite(LOCATION, SITE, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
   group_by(SITE, SAMPLETYPE) %>% 
-  arrange(LAT) %>%
-  filter(VENT != "Quakeplume") %>% 
+  arrange(Latitude) %>%
+  filter(VENT != "Quakeplume") %>%
+  # replace_na("na") %>% 
   distinct() %>%  
   gt(
     groupname_col = c("SITE", "SAMPLETYPE"),
@@ -226,19 +228,19 @@ table_all_geochem <- geomchem_table %>%
   #                        'Mg mmol/L', 'H2 µmol/L', 'H2S mmol/L'),
   #            colors = my_color_pal) %>% 
   fmt_number(columns = c('Depth (m)'), decimals = 0) %>%
-  fmt_number(columns = c(Temperature), decimals = 1) %>% 
-  fmt_scientific(columns = 'Microbial concentration') %>% 
+  fmt_number(columns = c('Temperature (°C)'), decimals = 1) %>% 
+  fmt_scientific(columns = 'Microbial concentration (cells/mL)') %>% 
   fmt_percent(columns = 'Percent Seawater', decimals = 0) %>% 
   fmt_number(columns = c(pH), n_sigfig = 2) %>%
-  fmt_number(columns = c('Mg mmol/L'), n_sigfig = 3) %>% 
-  fmt_number(columns = c('CH4 µmol/L'), n_sigfig = 2) %>% 
-  fmt_number(columns = c('H2 µmol/L', 'H2S mmol/L'), n_sigfig = 2) %>%
+  fmt_number(columns = c('Mg mmol/L (mM)'), n_sigfig = 3) %>% 
+  fmt_number(columns = c('CH4 µmol/L (µM)'), n_sigfig = 2) %>% 
+  fmt_number(columns = c('H2 µmol/L (µM)', 'H2S mmol/L (mM)'), n_sigfig = 2) %>%
   tab_header(
     title = md("**Vent fluid parameters**")
   ) %>% 
   tab_spanner(
     label = "Location",
-    columns = c('Depth (m)', LAT, LONG)
+    columns = c('Depth (m)', Latitude, Longitude)
   ) %>% 
   tab_style(
     style = list(
@@ -250,11 +252,12 @@ table_all_geochem <- geomchem_table %>%
   tab_style(
     style = cell_text(color = "black", weight = "bold"),
     locations = cells_stub()) %>% 
-  tab_source_note(md("*NA represents not detected or not sampled*")) %>% 
+  tab_source_note(md("*NA represents no data, bd indicates below detection*")) %>% 
   tab_options(table.width = px(500)) %>% 
   opt_table_lines()
 table_all_geochem
-# gtsave(table_all_geochem, filename = "geochemistry_all_gt.html", path = "output-tables/")
+## Include this html file in github output files too
+gtsave(table_all_geochem, filename = "geochemistry_all_gt.html", path = "output-tables/")
 
 # install.packages("webshot")
 # webshot::install_phantomjs()
