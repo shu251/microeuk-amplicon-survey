@@ -1,5 +1,5 @@
 ---
-title: "microeuk-deepbiosphere-survey"
+title: "Microbial eukaryotes at deep-sea hydrothermal vents"
 author: "Sarah Hu"
 date: "2/10/2022"
 output: 
@@ -644,9 +644,81 @@ insitu_asv_wClass %>%
 
 ## UpsetR by ASV level
 
-```{r, fig.width=10, fig.height=8}
+```{r, fig.width=12, fig.height=8}
+# set.seed(1234)
 alv <- c("Alveolata-Ellobiopsidae", "Alveolata-Perkinsea", "Alveolata-Unknown", "Alveolata-Chrompodellids", "Alveolata-Apicomplexa")
-# svg("../../../Manuscripts_presentations_reviews/deepsea-microeuk-ME/vectorgraphic-figures/fig2b-upsetR-all.svg", h=8, w=10)
+# svg("../../../Manuscripts_presentations_reviews/deepsea-microeuk-ME/vectorgraphic-figures/fig2b-upsetR-all_revised.svg", h=8, w=12)
+insitu_asv_wClass %>% 
+  filter(SITE %in% all) %>%
+  filter(Domain == "Eukaryota") %>% 
+  filter(Supergroup != "Opisthokonta") %>% 
+  mutate(Supergroup = ifelse(is.na(Supergroup), "Unknown Eukaryota", Supergroup),
+         Phylum = ifelse(is.na(Phylum), "Unknown", Phylum),
+         Phylum = ifelse(Phylum == "Alveolata_X", "Ellobiopsidae", Phylum),
+         Supergroup = ifelse(Supergroup == "Alveolata", paste(Supergroup, Phylum, sep = "-"), Supergroup)) %>% 
+  mutate(SUPERGROUP = case_when(
+    Supergroup %in% alv ~ "Other Alveolata",
+    Supergroup == "Eukaryota_X" ~ "Unknown Eukaryota",
+    Phylum == "Cercozoa" ~ "Rhizaria-Cercozoa",
+    Phylum == "Radiolaria" ~ "Rhizaria-Radiolaria",
+    Phylum == "Ochrophyta" ~ "Stramenopiles-Ochrophyta",
+    Phylum == "Opalozoa" ~ "Stramenopiles-Opalozoa",
+    Phylum == "Sagenista" ~ "Stramenopiles-Sagenista",
+    Supergroup == "Protalveolata" ~ "Other Alveolata",
+    TRUE ~ Supergroup
+  )) %>% 
+  # Taxa to supergroup
+  mutate(SupergroupPhylum = SUPERGROUP) %>%
+  # Average across replicates
+    group_by(FeatureID, SAMPLENAME, VENT, SupergroupPhylum) %>% 
+    summarise(AVG = mean(value)) %>% 
+  ungroup() %>% 
+  separate(SAMPLENAME, c("SITE", "SAMPLETYPE", "YEAR", "Sample_tmp"), remove = TRUE) %>% 
+  mutate(REGION = case_when(
+    SITE == "GordaRidge" ~ "Gorda Ridge",
+    SITE %in% mcr ~ "Mid-Cayman Rise",
+    SITE == "Axial" ~ "Axial")) %>% 
+  mutate(VENTNAME = case_when(
+    REGION == "Gorda Ridge" ~ VENT,
+    REGION == "Mid-Cayman Rise" ~ paste(SITE, VENT, sep = " "),
+    REGION == "Axial" ~ paste(VENT, YEAR, sep = " ")
+  )) %>% select(-Sample_tmp) %>% 
+  unite(SAMPLE, SITE, SAMPLETYPE, sep = " ", remove = FALSE) %>% 
+  group_by(FeatureID, SupergroupPhylum, SAMPLE) %>% 
+    summarise(SUM = sum(AVG)) %>%
+  ungroup() %>% 
+  mutate(SUPERGROUP_ORDER = factor(SupergroupPhylum, levels = all_taxa_order)) %>%
+  distinct(FeatureID, SUPERGROUP_ORDER, SUM, SAMPLE, .keep_all = TRUE) %>% 
+  group_by(FeatureID, SUPERGROUP_ORDER) %>% 
+  summarise(SAMPLE = list(SAMPLE)) %>% 
+  ggplot(aes(x = SAMPLE)) +
+  geom_hline(yintercept = 200, linetype = "dashed", alpha = 0.6) +
+    geom_bar(color = NA, width = 0.7, aes(fill = SUPERGROUP_ORDER)) +
+  scale_x_upset(order_by = "freq", n_intersections = 25) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x = "", y = "Shared ASVs") +
+  theme_linedraw() +
+  theme(axis.text.y = element_text(color="black", size=14, face = "bold"),
+        axis.text.x = element_text(color="black", size=14, face = "bold"),
+        axis.title = element_text(color="black", size=14, face = "bold"),
+        legend.text = element_text(color = "black", size = 12),
+        plot.margin = margin(1, 1, 1, 5, "cm"),
+        legend.title = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none") +
+  scale_fill_manual(values = all_taxa_color) +
+  theme_combmatrix(
+    combmatrix.panel.striped_background.color.two = "#878686",
+    combmatrix.panel.point.size = 3.5
+  )
+# dev.off()
+
+```
+
+
+```{r, fig.height=8, fig.width=12}
+# svg("../../../Manuscripts_presentations_reviews/deepsea-microeuk-ME/vectorgraphic-figures/fig-revised-200_upset.svg", h=8, w=12)
 insitu_asv_wClass %>% 
   filter(SITE %in% all) %>%
   filter(Domain == "Eukaryota") %>% 
@@ -687,13 +759,21 @@ insitu_asv_wClass %>%
     summarise(SUM = sum(AVG)) %>%
   # filter(SUM > 200) %>% 
   ungroup() %>% 
-  mutate(SUPERGROUP_ORDER = factor(SupergroupPhylum, levels = all_taxa_order)) %>%
-  distinct(FeatureID, SUPERGROUP_ORDER, SUM, SAMPLE, .keep_all = TRUE) %>% 
-  group_by(FeatureID, SUPERGROUP_ORDER) %>% 
+  distinct(FeatureID, SupergroupPhylum, SUM, SAMPLE, .keep_all = TRUE) %>% 
+  group_by(FeatureID, SupergroupPhylum) %>% 
   summarise(SAMPLE = list(SAMPLE)) %>% 
+  mutate(samples = sapply(SAMPLE, paste, collapse = " ")) %>%
+  group_by(samples) %>%
+  filter(n() < 250) %>%
+  ungroup() %>% 
+  mutate(SUPERGROUP_ORDER = factor(SupergroupPhylum, levels = all_taxa_order)) %>%
+  #how to order samples in the same way as above?
+  # mutate(SAMPLE_ORDER = factor(SAMPLE, levels = c("Axial Vent", "GordaRidge Vent", "VonDamm Vent", "GordaRidge Background", "Piccard Vent", "VonDamm Plume", "GordaRidge Plume", "VonDamm Background", "Axial Plume", "Piccard Background", "Axial Background", "Piccard Plume"))) %>% 
   ggplot(aes(x = SAMPLE)) +
+  geom_hline(yintercept = 200, linetype = "dashed", alpha = 0.6) +
     geom_bar(color = NA, width = 0.7, aes(fill = SUPERGROUP_ORDER)) +
-    scale_x_upset(n_intersections = 25) +
+    scale_x_upset(order_by = "freq", n_intersections = 25) +
+    # axis_combmatrix(sep = "-") +
   scale_y_continuous(expand = c(0,0)) +
   labs(x = "", y = "Shared ASVs") +
   theme_linedraw() +
@@ -704,11 +784,16 @@ insitu_asv_wClass %>%
         plot.margin = margin(1, 1, 1, 5, "cm"),
         legend.title = element_blank(),
         panel.grid.minor = element_blank(),
-        legend.position = "none") +
-  scale_fill_manual(values = all_taxa_color)
+        panel.grid.major = element_blank(),
+        legend.position = "none") + #when revising this figure, always check color legend
+  scale_fill_manual(values = all_taxa_color) +
+  theme_combmatrix(
+    combmatrix.panel.striped_background.color.two = "#878686",
+    combmatrix.panel.point.size = 3.5
+  )
 # dev.off()
-
 ```
+
 
 Observations regarding above plot: - Axial and Gorda Ridge vent sites
 have more shared ASVs than any other pairwise comparison. After this,
