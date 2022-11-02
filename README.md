@@ -1,6 +1,8 @@
 # Globally-distributed microbial eukaryotes exhibit endemism at deep-sea hydrothermal vents
 
-Hu, S. K., Smith, A. , Anderson, R., Sylva, S., Setzer, M., Steadmon, M., Frank, K., Chan, E., Lim, D., German , C., Breier, J. A., Lang, S. Q., Butterfield, D., Fortunato, C. S., Seewald, J., & Huber, J. A. (_in review_). _Globally-distributed microbial eukaryotes exhibit endemism at deep-sea hydrothermal vents_. Molecular Ecology.
+Hu, S. K., Smith, A. , Anderson, R., Sylva, S., Setzer, M., Steadmon, M., Frank, K., Chan, E., Lim, D., German , C., Breier, J. A., Lang, S. Q., Butterfield, D., Fortunato, C. S., Seewald, J., & Huber, J. A. (2022). _Globally-distributed microbial eukaryotes exhibit endemism at deep-sea hydrothermal vents_. Molecular Ecology. doi:10.1111/mec.16745
+
+[link to paper](https://onlinelibrary.wiley.com/doi/abs/10.1111/mec.16745)
 
 **Summary**: Single-celled microbial eukaryotes inhabit deep-sea hydrothermal vent environments and play critical ecological roles in the vent-associated microbial food web. 18S rRNA amplicon sequencing of diffuse venting fluids from four geographically- and geochemically-distinct hydrothermal vent fields was applied to investigate community diversity patterns among protistan assemblages. The four vent fields include Axial Seamount at the Juan de Fuca Ridge, Sea Cliff and Apollo at the Gorda Ridge, all in the NE Pacific Ocean, and Piccard and Von Damm at the Mid-Cayman Rise in the Caribbean Sea. We describe species diversity patterns with respect to hydrothermal vent field and sample type, identify putative vent endemic microbial eukaryotes, and test how vent fluid geochemistry may influence microbial community diversity. At a semi-global scale, microbial eukaryotic communities at deep-sea vents were composed of similar proportions of dinoflagellates, ciliates, Rhizaria, and stramenopiles. Individual vent fields supported distinct and highly diverse assemblages of protists that included potentially endemic or novel vent-associated strains. These findings represent a census of deep-sea hydrothermal vent protistan communities. Protistan diversity, which is shaped by the hydrothermal vent environment at a local scale, ultimately influences the vent-associated microbial food web and the broader deep-sea carbon cycle.
 
@@ -25,4 +27,4 @@ See `seq-analysis` directory for code related to QIIME2 execution. All upstream 
 
 ***
 
-_last updated 9-17-2022_
+_last updated 11-02-2022_
