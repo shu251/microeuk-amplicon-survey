@@ -1,0 +1,361 @@
+---
+title: "Cluster ASVs supplement"
+author: "Sarah Hu"
+date: "5/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+A main take home from this manuscript is the number of unique ASVs and lack of overlap between vent fields and sites within a vent field. To explore this further, determined ASVs were 'clustered' further into 'OTUs' at 99%, 97%, and 95% similarity. Re-evaluating the number of unique ASVs and clustered OTUs at different similariy percentages will help demonstrate how unique species diversity is at each vent field and site.
+
+```{r}
+library(tidyverse); library(gt); library(purrr)
+library(geosphere); library(compositions); library(vegan)
+library(ggpubr)
+```
+
+
+# Import clustered ASV data & merge data
+
+Import and format metadata
+```{r}
+metadata <- read.delim("../data-input/samplelist-metadata.txt", na.strings = "")
+metadata_formatted <- metadata %>% 
+  mutate_all(as.character) %>%
+  filter(Sample_or_Control == "Sample") %>% 
+  filter(!(SAMPLETYPE == "Incubation")) %>% 
+  filter(!(SAMPLETYPE == "Microcolonizer")) %>% 
+  select(SAMPLE, VENT, SITE, SAMPLEID, DEPTH, SAMPLETYPE, YEAR, TEMP = starts_with("TEMP"), pH, PercSeawater = starts_with("Perc"), Mg = starts_with("Mg"), H2 = starts_with("H2."), H2S = starts_with("H2S"), CH4 = starts_with("CH4"), ProkConc, Sample_or_Control)
+```
+
+Function to merge taxonomy and ASV tables
+```{r}
+generate_merged <- function(asv, tax, percent){
+merged_table <- asv %>%
+  select(FeatureID = '#OTU ID', everything()) %>%
+  pivot_longer(cols = !FeatureID,
+               names_to = "SAMPLE", values_to = "value") %>%
+  left_join(tax, by = c("FeatureID" = "Feature ID")) %>%
+  left_join(metadata_formatted) %>%
+  filter(!grepl("Siders_", SAMPLE)) %>% 
+  filter(SAMPLETYPE != "Incubation") %>% 
+  filter(SAMPLETYPE != "Microcolonizer") %>%
+  mutate(DATASET = case_when(
+    grepl("_GR_", SAMPLE) ~ "GR",
+    grepl("Gorda", SAMPLE) ~ "GR",
+    grepl("_MCR_", SAMPLE) ~ "MCR",
+    grepl("Axial", SAMPLE) ~ "Axial",
+  TRUE ~ "Control or blank")) %>%
+    separate(Taxon, c("Domain", "Supergroup",
+                  "Phylum", "Class", "Order",
+                  "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>% 
+  unite(SAMPLENAME, SITE, SAMPLETYPE, YEAR, VENT, SAMPLEID, sep = " ", remove = FALSE) %>% 
+  filter(!(FeatureID %in% list_of_contam_asvs)) %>% 
+  filter(!SAMPLE %in% toofew) %>% 
+  filter(value > 0) %>% 
+  add_column(SIMILARITY = percent)
+}
+```
+
+
+Import ASVs that were removed during decontam step. See seq analysis code.
+```{r}
+load("contam-asvs.RData", verbose = TRUE)
+# list_of_contam_asvs
+```
+
+```{r}
+load("../data-input/asv-tables-processed-27012022.RData", verbose = T)
+head(asv_insitu_qc)
+```
+
+```{r}
+tmp <- (asv_insitu %>% 
+          group_by(SAMPLE, SAMPLENAME) %>% 
+          summarise(SUM = sum(value)) %>% 
+        filter(SUM < 20000))
+toofew <- as.character(unique(tmp$SAMPLE))
+# toofew
+```
+
+99% identity
+```{r, message=FALSE}
+tax_99 <- read_delim("supp-clustered-ASVs/taxonomy-99.tsv", delim = "\t")
+asv_99 <- read_delim("supp-clustered-ASVs/asv-cluster-99.tsv", delim = "\t", skip = 1)
+output_99 <- generate_merged(asv_99, tax_99, "99")
+```
+97% similarity
+```{r, message=FALSE}
+tax_97 <- read_delim("supp-clustered-ASVs/taxonomy-97.tsv", delim = "\t")
+asv_97 <- read_delim("supp-clustered-ASVs/asv-cluster-97.tsv", delim = "\t", skip = 1)
+output_97 <- generate_merged(asv_97, tax_97, "97")
+```
+
+
+95% similarity
+```{r, message=FALSE}
+tax_95 <- read_delim("supp-clustered-ASVs/taxonomy-95.tsv", delim = "\t")
+asv_95 <- read_delim("supp-clustered-ASVs/asv-cluster-95.tsv", delim = "\t", skip = 1)
+output_95 <- generate_merged(asv_95, tax_95, "95")
+```
+
+## Stats for table
+
+Bind together and report number of ASVs from each analysis
+```{r}
+bind_rows(output_95, output_97, output_99, (asv_insitu_qc %>% add_column(SIMILARITY = "ASVs"))) %>% 
+       group_by(SIMILARITY) %>%
+       summarise(SEQ_SUM = sum(value),
+                 TOTAL_ASVs = length(unique(FeatureID))) %>%
+  ungroup() %>%
+  gt(
+    # groupname_col = c("DATASET", "SITE"),
+    rowname_col = "SIMILARITY")
+```
+
+Function to repeat presence/absence analysis on each data frame.
+
+```{r}
+
+asv_classification <- function(df, percent){
+    tax_asv_id <- df %>% 
+      filter(value > 0) %>% #remove zero values
+      select(FeatureID, SITE, SAMPLETYPE) %>% # isolate only ASVs that are PRESENT at a site and sampletype
+      distinct() %>% #unique this, as presense = present in at least 1 rep (where applicable)
+      unite(sample_id, SITE, SAMPLETYPE, sep = "_") %>% 
+      add_column(present = 1) %>%
+      pivot_wider(names_from = sample_id, values_from = present, values_fill = 0) %>% 
+      rowwise() %>% 
+      mutate_at(vars(FeatureID), factor)
+  ##
+    any_cols <- function(tax_asv_id) reduce(tax_asv_id, `|`)
+  ##
+    asv_class <- tax_asv_id %>%
+      mutate(vent = ifelse(any_cols(across(contains("_Vent"), ~ . > 0)), "VENT", ""),
+             plume= ifelse(any_cols(across(contains("_Plume"), ~ . > 0)), "PLUME", ""),
+             bsw = ifelse(any_cols(across(contains("_Background"), ~ . > 0)), "BSW", ""),
+             ) %>% 
+      unite(class_tmp, vent, plume, bsw, sep = "_", na.rm = TRUE) %>% 
+      mutate(CLASS = case_when(
+      class_tmp == "VENT__" ~ "Vent only",
+      class_tmp == "_PLUME_" ~ "Plume only",
+      class_tmp == "__BSW" ~ "Background only",
+      class_tmp == "VENT__BSW" ~ "Vent & background",
+      class_tmp == "VENT_PLUME_BSW" ~ "Vent, plume, & background",
+      class_tmp == "VENT_PLUME_" ~ "Vent & plume",
+      class_tmp == "_PLUME_BSW" ~ "Plume & background"
+      )) %>% 
+      select(FeatureID, CLASS) %>% distinct() %>% 
+    add_column(SIMILARITY = percent)
+  ##
+    asv_class_SITE <- tax_asv_id %>%
+      mutate(
+            picc = ifelse(any_cols(across(contains("Piccard"), ~ . > 0)), "Picc", ""),
+            vd = ifelse(any_cols(across(contains("VonDamm"), ~ . > 0)), "VD", ""),
+             axial = ifelse(any_cols(across(contains("Axial"), ~ . > 0)), "AxS", ""),
+             gr = ifelse(any_cols(across(contains("Gorda"), ~ . > 0)), "GR", "")
+             ) %>% 
+      # unite(class_tmp, mcr, axial, gr, sep = "_", na.rm = TRUE) %>%
+      unite(class_tmp, picc, vd, axial, gr, sep = "_", na.rm = TRUE) %>% 
+      # unique(asv_class_SITE$class_tmp)
+      mutate(SITE_CLASS = case_when(
+      class_tmp == "___GR" ~ "Gorda Ridge only",
+      class_tmp == "__AxS_" ~ "Axial only",
+      class_tmp == "_VD__" ~ "Von Damm only",
+      class_tmp == "Picc_VD__" ~ "Piccard & Von Damm",
+      class_tmp == "Picc___" ~ "Piccard only",
+      class_tmp == "Picc_VD_AxS_" ~ "MCR & Axial",
+      class_tmp == "__AxS_GR" ~ "Axial & Gorda Ridge",
+      class_tmp == "_VD__GR" ~ "Von Damm & Gorda Ridge",
+      class_tmp == "_VD_AxS_GR" ~ "Von Damm, Axial, & Gorda Ridge",
+      class_tmp == "_VD_AxS_" ~ "Von Damm & Axial",
+      # class_tmp == "MCR__" ~ "Mid-Cayman Rise",
+      class_tmp == "Picc_VD__GR" ~ "MCR & Gorda Ridge",
+      class_tmp == "Picc__AxS_GR" ~ "Piccard, Axial, & Gorda Ridge",
+      class_tmp == "Picc___GR" ~ "Piccard & Gorda Ridge",
+      class_tmp == "Picc__AxS_" ~ "Piccard & Axial",
+      class_tmp == "Picc_VD_AxS_GR" ~ "All sites"
+      )) %>% 
+      select(FeatureID, SITE_CLASS) %>% distinct() %>% 
+    add_column(SIMILARITY = percent) 
+  ##
+  output <- df %>% 
+    left_join(asv_class) %>% 
+    left_join(asv_class_SITE)
+  ##
+  return(output)
+}
+```
+
+```{r}
+class_table_99 <- asv_classification(output_99, "99")
+class_table_97 <- asv_classification(output_97, "97")
+class_table_95 <- asv_classification(output_95, "95")
+```
+
+```{r}
+cosmo <- c("Vent, plume, & background", "Vent & background", "Vent & plume", "Plume & background")
+bind_rows(class_table_95, class_table_97, class_table_99, (insitu_asv_wClass %>% add_column(SIMILARITY = "ASVs"))) %>% 
+  mutate(DISTRIBUTION = case_when(
+    CLASS %in% cosmo ~ "Cosmopolitan",
+    CLASS == "Vent only" ~ "Resident"
+    )) %>%
+  mutate(FIELD = case_when(
+    grepl(" only", SITE_CLASS) ~ "Unique to vent field",
+    TRUE ~ "else"
+  )) %>% 
+       group_by(SIMILARITY, FIELD) %>%
+       summarise(SEQ_SUM = sum(value),
+                 TOTAL_ASVs = length(unique(FeatureID))) %>%
+    filter(!(FIELD == "else")) %>%
+  ungroup() %>%
+  gt(
+    # groupname_col = c("CLASS", "SITE"),
+    # groupname_col = c("SITE_CLASS"),
+    rowname_col = "SIMILARITY")
+```
+```{r}
+cosmo <- c("Vent, plume, & background", "Vent & background", "Vent & plume", "Plume & background")
+bind_rows(class_table_95, class_table_97, class_table_99, (insitu_asv_wClass %>% add_column(SIMILARITY = "ASVs"))) %>% 
+  mutate(DISTRIBUTION = case_when(
+    CLASS %in% cosmo ~ "Cosmopolitan",
+    CLASS == "Vent only" ~ "Resident"
+    )) %>%
+  mutate(FIELD = case_when(
+    grepl(" only", SITE_CLASS) ~ "Unique to vent field",
+    TRUE ~ "else"
+  )) %>% 
+       group_by(SIMILARITY, DISTRIBUTION) %>%
+       summarise(SEQ_SUM = sum(value),
+                 TOTAL_ASVs = length(unique(FeatureID))) %>%
+    # filter(!(FIELD == "else")) %>%
+  ungroup() %>%
+  gt(
+    # groupname_col = c("CLASS", "SITE"),
+    # groupname_col = c("SITE_CLASS"),
+    rowname_col = "SIMILARITY")
+```
+
+
+```{r}
+cosmo <- c("Vent, plume, & background", "Vent & background", "Vent & plume", "Plume & background")
+
+bind_rows(class_table_95, class_table_97, class_table_99, (insitu_asv_wClass %>% add_column(SIMILARITY = "ASVs"))) %>% 
+  mutate(DISTRIBUTION = case_when(
+    CLASS %in% cosmo ~ "Cosmopolitan",
+    CLASS == "Vent only" ~ "Resident"
+    )) %>%
+  filter(DISTRIBUTION == "Resident") %>% 
+  mutate(FIELD = case_when(
+    grepl(" only", SITE_CLASS) ~ "Unique to vent field",
+    TRUE ~ "else"
+  )) %>% 
+       group_by(SIMILARITY, DISTRIBUTION, FIELD) %>%
+       summarise(SEQ_SUM = sum(value),
+                 TOTAL_ASVs = length(unique(FeatureID))) %>%
+    filter(!(FIELD == "else")) %>%
+  ungroup() %>%
+  gt(
+    # groupname_col = c("CLASS", "SITE"),
+    # groupname_col = c("SITE_CLASS"),
+    rowname_col = "SIMILARITY")
+```
+
+
+## Distance-decay
+
+```{r}
+load("../data-input/asv-tables-processed-27012022.RData", verbose = TRUE)
+metadata <- read.delim("../data-input/samplelist-metadata.txt", na.strings = "")
+```
+
+
+Calculate distances between all sites
+```{r}
+coords_input <- read.delim("../tableS1-geochem-params.txt") %>% 
+  select(VENT, SITE, SAMPLETYPE, LONG, LAT) %>% 
+  unite(SAMPLENAME, VENT, SITE, SAMPLETYPE, sep = "_") %>% 
+  distinct(SAMPLENAME, .keep_all = TRUE) %>%
+  column_to_rownames(var = "SAMPLENAME")
+
+vents_all <- row.names(coords_input)
+distances_m <- as.data.frame(distm(coords_input, fun = distHaversine))
+colnames(distances_m) <- vents_all
+rownames(distances_m) <- vents_all
+```
+
+Calculate distances and create long format dataframe
+```{r}
+dist_m <- distances_m %>% 
+  rownames_to_column(var = "start") %>% 
+  pivot_longer(cols = vents_all, names_to = "end") %>%
+  filter(!(start == end))
+# head(dist_m)
+```
+
+
+```{r}
+# Widen an numeric the ASVs for the distance calculations
+# vents # use this list of samples
+
+dist_decay <- function(df, percent){
+  df_wide_num <- df %>% 
+  group_by(FeatureID, SAMPLENAME, VENT, SITE, SAMPLETYPE) %>% 
+  summarise(AVG = mean(value)) %>% 
+    ungroup() %>%
+  select(-SAMPLENAME) %>% 
+  unite(SAMPLENAME, VENT, SITE, SAMPLETYPE, sep = "_") %>% 
+  group_by(FeatureID, SAMPLENAME) %>% 
+  summarise(SUM = sum(AVG)) %>% 
+  pivot_wider(names_from = FeatureID, values_from = SUM, values_fill = 0) %>% 
+  column_to_rownames(var = "SAMPLENAME")
+  #
+  vents <- row.names(df_wide_num)
+  #
+  dist_jacc <- as.data.frame(as.matrix(vegdist(df_wide_num, method = "jaccard"))) %>% 
+  rownames_to_column(var = "start") %>% 
+  pivot_longer(cols = vents, names_to = "end") %>% 
+  select(start, end, Jaccard_metric = value)
+  ##
+  dist_compiled_output <- dist_m %>% 
+  select(start, end, meters = value) %>% 
+  left_join(dist_jacc) %>% 
+  pivot_longer(cols = ends_with("_metric"), names_to = "comm_dist") %>% 
+  filter(!(start == end)) %>%
+  mutate(km = (meters/1000),
+         dist0 = gsub("_", " ", comm_dist),
+         dist = gsub(" metric", "", dist0)) %>% 
+    add_column(SIMILARITY = percent)
+  ##
+  return(dist_compiled_output)
+}
+```
+
+```{r}
+asvs <- dist_decay(insitu_asv_wClass, "ASVs")
+dist_99 <- dist_decay(class_table_99, "99%")
+dist_97 <- dist_decay(class_table_97, "97%")
+dist_95 <- dist_decay(class_table_95, "95%")
+```
+
+
+```{r, fig.height=10, fig.width=4}
+# svg("dist-decay-supp-clustered.svg", h = 10, w = 4)
+dist_decay <- bind_rows(dist_99, dist_97, dist_95) %>% 
+  ggplot(aes(x = km, y = value)) +
+  geom_jitter() +
+  scale_x_log10(labels = scales::comma) +
+  facet_wrap(SIMILARITY ~ ., scales = "free", ncol = 1) +
+  geom_smooth(method="lm") +
+  theme_linedraw() +
+  stat_regline_equation(aes(label = ..rr.label..), color = "black", label.y.npc = 0.09, label.x.npc = 0.7) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(color = "black")) +
+  labs(y = "")
+dist_decay
+# dev.off()
+```
+
